@@ -13,12 +13,12 @@ class MyDataBank(DataBank):
         super().__init__()
 
     def new_values():
-        tem = int(normalvariate(65, 8)) #Register 0
-        umi = int(normalvariate(25, 10)) #Register 1
-        ten = int(normalvariate(350, 10)) #Register 2
-        pot = int(normalvariate(770, 12)) #Register 3
-        vent = int(normalvariate(4, 1)) #Register 4
-        irrad = int(normalvariate(1100, 60)) #Register 5
+        tem = int(normalvariate(65, 2)) #Register 0
+        umi = int(normalvariate(45, 5)) #Register 1
+        ten = int(normalvariate(350, 3)) #Register 2
+        pot = int(normalvariate(770, 4)) #Register 3
+        vent = int(normalvariate(4, .5)) #Register 4
+        irrad = int(normalvariate(1100, 10)) #Register 5
         return [tem, umi, ten, pot, vent, irrad]
 
     def get_holding_registers(self, address, number=1, srv_info=None):

@@ -12,13 +12,13 @@ class MainWindow(QMainWindow):
         
         # Configuração da janela principal
         self.setWindowTitle("Interface Datalogger")
-        self.setGeometry(100, 100, 1440, 810)  # Reduzindo o tamanho da janela para 80%
+        self.setGeometry(100, 100, 1440, 810)
         
         # Widget principal e layout
         central_widget = QWidget()
         layout = QGridLayout()
-        layout.setContentsMargins(20, 20, 20, 20)  # Margens internas
-        layout.setSpacing(15)  # Espaçamento entre elementos
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(15)
         central_widget.setLayout(layout)
         self.setCentralWidget(central_widget)
         
@@ -40,8 +40,19 @@ class MainWindow(QMainWindow):
         # Botão Config para alternar entre dados e gráficos
         self.config_button = QPushButton("Exibir Gráfico")
         self.config_button.setFixedSize(150, 40)
-        self.config_button.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 14px; border: none;")
-        self.config_button.clicked.connect(self.toggle_view)  # Conectar ao método para alternar exibição
+        self.config_button.setStyleSheet("""
+            QPushButton {
+                background-color: #ffffff;
+                color: #4a90e2;
+                font-size: 14px;
+                border: none;
+                border-radius: 5px;
+            }
+            QPushButton:hover {
+                background-color: #e0e0e0;
+            }
+        """)
+        self.config_button.clicked.connect(self.toggle_view)
         header_layout = QGridLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 20, 0)
         header_layout.addWidget(self.config_button, 0, 0, alignment=Qt.AlignmentFlag.AlignRight)
@@ -53,125 +64,136 @@ class MainWindow(QMainWindow):
         sidebar_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
         layout.addWidget(sidebar_widget, 1, 0, 1, 1)
         
-        # Inicializar lista para armazenar os labels
-        self.labels = []
-
-        # Layout da grade para os labels
+        # Layout da grade para os labels e gráficos
         self.grid_widget = QWidget()
         self.grid_layout = QGridLayout()
-        self.grid_layout.setSpacing(20)  # Aumentar o espaçamento entre labels
+        self.grid_layout.setSpacing(20)
         
+        # Listas para armazenar labels e gráficos
+        self.labels = []
+        self.graphs = []
+        
+        # Preenchendo a grade com widgets de labels e gráficos
         for row in range(3):
             for col in range(2):
-                # Retângulo com label
+                # Widget para gráfico com canvas do matplotlib
+                graph_canvas = FigureCanvas(plt.Figure(figsize=(5, 4)))
+                graph_canvas.setFixedSize(500, 200)
+                self.graphs.append(graph_canvas)
+                
+                # Widget com label para exibir texto
                 rect_widget = QWidget()
                 rect_widget.setFixedSize(500, 120)
-                rect_widget.setStyleSheet("""
-                    background-color: #f0f0f0;
-                    border: 1px solid #d0d0d0;
-                    border-radius: 8px;
-                """)
+                rect_widget.setStyleSheet("background-color: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 10px;")
                 
-                # Label para exibir o texto
                 label = QLabel("Texto Inicial")
                 label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                label.setStyleSheet("color: #333333;")  # Cor do texto suave
+                label.setStyleSheet("color: #333333;")
                 font = QFont()
-                font.setPixelSize(18)  # Ajuste do tamanho da fonte para visualização no QLabel
+                font.setPixelSize(22)
                 label.setFont(font)
                 
-                # Adicionar o label à lista
                 self.labels.append(label)
                 
-                # Configurar layout do retângulo e adicionar o label
+                # Layout para o label e adição ao widget
                 rect_layout = QGridLayout(rect_widget)
                 rect_layout.setContentsMargins(0, 0, 0, 0)
                 rect_layout.addWidget(label, 0, 0)
                 
+                # Adicionar widgets ao grid
                 self.grid_layout.addWidget(rect_widget, row, col)
-        
+                self.grid_layout.addWidget(graph_canvas, row, col)
+                graph_canvas.hide()  # Ocultar gráficos inicialmente
+                
         self.grid_widget.setLayout(self.grid_layout)
         layout.addWidget(self.grid_widget, 1, 1, 1, 1)
         
         # Configuração do timer para atualizar números
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_numbers)
-        self.timer.start(2000)
+        self.timer.start(1500)
         
-        # Widget de gráfico (inicialmente oculto)
-        self.graph_widget = FigureCanvas(plt.Figure(figsize=(5, 4)))
-        layout.addWidget(self.graph_widget, 1, 1, 1, 1)
-        self.graph_widget.hide()
-
-        # Ajuste do fundo branco
+        # Fundo claro
         self.setAutoFillBackground(True)
         palette = self.palette()
-        palette.setColor(QPalette.ColorRole.Window, QColor("#f8f8f8"))  # Fundo claro, menos agressivo
+        palette.setColor(QPalette.ColorRole.Window, QColor("#f8f8f8"))
         self.setPalette(palette)
         
-        # Chama a função de atualização de números para carregar dados no início
+        # Label para mensagens de erro
+        self.error_label = QLabel("")
+        self.error_label.setStyleSheet("color: red;")
+        layout.addWidget(self.error_label, 2, 1, 1, 1)
+        
+        # Atualizar números no início
         self.update_numbers()
 
     def update_numbers(self):
-        """Carrega dados de um arquivo JSON e atualiza os labels com as informações."""
         try:
-            # Definir o caminho do arquivo JSON
             file_path = os.path.join(os.path.dirname(__file__), "lista.json")
             
-            # Verificar se o arquivo existe
             if os.path.exists(file_path):
                 with open(file_path, "r") as file:
                     lista = json.load(file)
                     
-                    # Atualizar o texto dos labels de acordo com os dados do JSON
                     for i, label in enumerate(self.labels):
                         if i < len(lista):
                             text = f"{lista[i][1]}: {lista[i][0]} {lista[i][2]}"
                             label.setText(text)
+                self.error_label.setText("")  # Limpar mensagem de erro
             else:
-                print("Arquivo 'lista.json' não encontrado.")
+                self.error_label.setText("Arquivo 'lista.json' não encontrado.")
         
         except json.JSONDecodeError:
-            print("Erro ao decodificar JSON de 'lista.json'")
+            self.error_label.setText("Erro ao decodificar JSON de 'lista.json'")
             
     def toggle_view(self):
-        """Alterna entre a visualização de dados e o gráfico."""
-        if self.grid_widget.isVisible():
-            # Oculta os dados e exibe o gráfico
-            self.grid_widget.hide()
-            self.config_button.setText("Exibir Dados")
-            self.display_graph()
-            self.graph_widget.show()
+        if self.labels[0].isVisible():
+            # Oculta os labels e exibe gráficos
+            for label, graph_canvas in zip(self.labels, self.graphs):
+                label.hide()
+                self.config_button.setText("Exibir Dados")
+                self.display_graph(graph_canvas, label.text().split(":")[0])
+                graph_canvas.show()
         else:
-            # Oculta o gráfico e exibe os dados
-            self.graph_widget.hide()
-            self.config_button.setText("Exibir Gráfico")
-            self.grid_widget.show()
+            # Oculta gráficos e exibe labels
+            for label, graph_canvas in zip(self.labels, self.graphs):
+                graph_canvas.hide()
+                self.config_button.setText("Exibir Gráfico")
+                label.show()
 
-    def display_graph(self):
-        """Atualiza o gráfico com dados de exemplo (substituir pelos dados reais)."""
-        # Obter o eixo da figura e limpar para atualização
-        ax = self.graph_widget.figure.subplots()
+    def display_graph(self, graph_canvas, data_type):
+        ax = graph_canvas.figure.subplots()
+        fig = graph_canvas.figure
         ax.clear()
+
+        #apaga a figura anterior
+        fig.clear()
+
+        #cria um novo eixo pra figura
+        ax = fig.add_subplot(111)
         
-        # Dados de exemplo para o gráfico
-        x = [1, 2, 3, 4]
-        y = [10, 20, 15, 25]
+        file_path = os.path.join(os.path.dirname(__file__), "historico_leituras.json")
         
-        # Plotar o gráfico
-        ax.plot(x, y, marker='o')
-        ax.set_title("Gráfico de Exemplo")
-        ax.set_xlabel("Tempo")
-        ax.set_ylabel("Valor")
-        
-        # Atualizar o widget do gráfico
-        self.graph_widget.draw()
+        if os.path.exists(file_path):
+            with open(file_path, "r") as file:
+                dados = json.load(file)
+                
+                if data_type in dados:
+                    x = list(range(len(dados[data_type])))
+                    y = dados[data_type]
+                    ax.plot(x, y, marker='o')
+                    ax.set_title(f"Gráfico de {data_type}")
+                    ax.set_xlabel("Tempo")
+                else:
+                    self.error_label.setText(f"Dados de {data_type} não encontrados no arquivo JSON.")
+        else:
+            self.error_label.setText("Arquivo 'historico_leituras.json' não encontrado.")
+
+        graph_canvas.draw()
 
 # Execução da aplicação
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-
     window = MainWindow()
     window.show()
-
     sys.exit(app.exec())
