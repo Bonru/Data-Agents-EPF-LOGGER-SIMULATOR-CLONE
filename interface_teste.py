@@ -186,15 +186,11 @@ class MainWindow(QMainWindow):
 
         # Iniciar o script Pymodbus_Server.py
         self.process = QProcess(self)
-        self.process.started.connect(lambda: print("Pymodbus_Server.py started successfully"))
-        self.process.errorOccurred.connect(self.handleError)
-        self.process.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_Server.py")])
+        self.process.start("python", [os.path.join(os.path.dirname(__file__), "Pymodbus_Server.py")])
 
         # Iniciar o script pymodbus_cliente.py
         self.process2 = QProcess(self)
-        self.process2.started.connect(lambda: print("Pymodbus_cliente.py started successfully"))
-        self.process2.errorOccurred.connect(self.handleError)
-        self.process2.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_cliente.py")])
+        self.process2.start("python", [os.path.join(os.path.dirname(__file__), "Pymodbus_cliente.py")])
 
     def update_numbers(self):
         try:
