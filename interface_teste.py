@@ -5,6 +5,7 @@ from PyQt6.QtGui import QPalette
 import sys, os, json
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from PyQt6.QtGui import QIntValidator
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -32,12 +33,12 @@ class MainWindow(QMainWindow):
         admin_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(admin_label, 0, 0, 1, 1)
         
-        # Barra superior com botão "Config"
+        # Barra superior com botão "toggle"
         header_widget = QWidget()
         header_widget.setFixedSize(1220, 90)
         header_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
         
-        # Botão Config para alternar entre dados e gráficos
+        # Botão toggle para alternar entre dados e gráficos
         self.config_button = QPushButton("Exibir Gráfico")
         self.config_button.setFixedSize(150, 40)
         self.config_button.setStyleSheet("""
@@ -74,46 +75,76 @@ class MainWindow(QMainWindow):
         # Layout do cabeçalho
         header_layout = QGridLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 20, 0)
-        header_layout.addWidget(self.config_button, 0, 0, alignment=Qt.AlignmentFlag.AlignRight)
-        header_layout.addWidget(self.close_button, 0, 1, alignment=Qt.AlignmentFlag.AlignRight)  # Adiciona o botão de fechar
+
+        # Adiciona espaços vazios nas primeiras colunas
+        for i in range(5):
+            header_layout.addWidget(QWidget(), 0, i)
+
+        # Adiciona os botões nas últimas duas colunas
+        header_layout.addWidget(self.config_button, 0, 5, alignment=Qt.AlignmentFlag.AlignCenter)
+        header_layout.addWidget(self.close_button, 0, 6, alignment=Qt.AlignmentFlag.AlignRight)
+
         layout.addWidget(header_widget, 0, 1, 1, 1)
         
         # Barra lateral esquerda com 5 linhas
         sidebar_widget = QWidget()
-        sidebar_widget.setFixedSize(160, 710)
+        sidebar_widget.setFixedSize(160, 700)
         sidebar_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
         sidebar_layout = QVBoxLayout()
         self.line_edits = []  # Lista para armazenar os elementos LineEdit
 
-        sidebar_layout.setContentsMargins(10, 10, 0, 10)
+        sidebar_layout.setContentsMargins(10, 10, 10, 10)
         
-        # Adicionando linhas de texto na barra lateral
-        label = QLabel(f"Force values")
-        label.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 20px;")
+        # Adicionando titulo na barra lateral
+        label = QLabel(f"Inserção manual")
+        label.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 18px;")
         label.setFixedSize(135, 50)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sidebar_layout.addWidget(label, alignment = Qt.AlignmentFlag.AlignCenter)
+        sidebar_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # Definindo estilos e tamanhos padronizados
+        label_style = "background-color: #ffffff; color: #4a90e2; font-size: 18px;"
+        line_edit_style = "background-color: #ffffff; color: #4a90e2; font-size: 16px;"
+        fixed_size = (120, 30)
+        max_length = 6  # Definindo o limite de caracteres
+
+        # Ajustando o espaçamento do layout
+        sidebar_layout.setSpacing(5)  # Define o espaçamento vertical entre os widgets
+        sidebar_layout.addWidget(QWidget(), alignment=Qt.AlignmentFlag.AlignCenter) #espaçamento
+
         for i in range(1, 7):
             try:
                 file_path = os.path.join(os.path.dirname(__file__), "lista.json")
                 if os.path.exists(file_path):
                     with open(file_path, "r") as file:
                         lista = json.load(file)
-                        if i < len(lista)+1:
-                            text = f"{lista[i-1][1]}"
+                        if i < len(lista) + 1:
+                            text = f"{lista[i - 1][1]}"
+                        else:
+                            text = "N/A"
+                else:
+                    text = "N/A"
             except json.JSONDecodeError:
                 self.error_label.setText("Erro ao decodificar JSON de 'lista.json'")
+                text = "Erro"
+
             label = QLabel(text)
-            label.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 18px;")
-            label.setFixedSize(100, 30)
+            label.setStyleSheet(label_style)
+            label.setFixedSize(*fixed_size)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            sidebar_layout.addWidget(label, alignment = Qt.AlignmentFlag.AlignCenter)
-            line_edit = QLineEdit(f"")
-            line_edit.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 16px;")
+            sidebar_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+            line_edit = QLineEdit("")
+            line_edit.setStyleSheet(line_edit_style)
+            line_edit.setFixedSize(*fixed_size)
             line_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            sidebar_layout.addWidget(line_edit, alignment = Qt.AlignmentFlag.AlignCenter)
+            line_edit.setMaxLength(max_length)  # Definindo o limite de caracteres
+            line_edit.setValidator(QIntValidator())  # Permitindo apenas entrada de números
+            sidebar_layout.addWidget(line_edit, alignment=Qt.AlignmentFlag.AlignCenter)
+            
             self.line_edits.append(line_edit)  # Adiciona o LineEdit à lista
-        
+            sidebar_layout.addWidget(QWidget(), alignment=Qt.AlignmentFlag.AlignCenter) #espaçamento
+
         sidebar_widget.setLayout(sidebar_layout)
         layout.addWidget(sidebar_widget, 1, 0, 1, 1)
         

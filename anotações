@@ -1,1 +1,17 @@
-e possivel fazer os arquivos em poo de forma que interface_teste.py consiga acessar funções de pymodbus_cliente.py?
+CONCLUIDOS
+
+Exibição Valores instantaneos
+Exibição Gráficos
+Botão mudança de exibição
+Botão fechar aplicação
+Funções de forçar valores na base de dados
+Limite de caracteres e aceitar apenas algarismos no forçar valores
+
+PROXIMO PASSO
+
+Melhorar exibição da interface porque ta feia ainda
+
+
+obs:    em alguns computadores, o QProcess pode exigir a linguagem de programação 
+        como "python" ou "python3" e isso causa diferença na execução do código
+
