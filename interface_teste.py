@@ -194,12 +194,10 @@ class MainWindow(QMainWindow):
         
         # Configuração do timer para atualizar números
         self.timer = QTimer(self)
+        self.timer.timeout.connect(self.force_variable)
         self.timer.timeout.connect(self.update_numbers)
         self.timer.start(1500)
 
-        self.timer2 = QTimer(self)
-        self.timer2.timeout.connect(self.force_variable)
-        self.timer2.start(500)
         
         # Fundo claro
         self.setAutoFillBackground(True)
