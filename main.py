@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QGridLayout, QLabel, QPushButton, QVBoxLayout, QLineEdit
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QGridLayout, QLabel, QPushButton, QVBoxLayout
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtCore import Qt, QTimer, QProcess
 from PyQt6.QtGui import QPalette
@@ -53,57 +53,15 @@ class MainWindow(QMainWindow):
             }
         """)
         self.config_button.clicked.connect(self.toggle_view)
-
-        # Botão para fechar a aplicação
-        self.close_button = QPushButton("Fechar Aplicação")
-        self.close_button.setFixedSize(150, 40)
-        self.close_button.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #4a90e2;
-                font-size: 14px;
-                border: none;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-            }
-        """)
-        self.close_button.clicked.connect(self.close_application)  # Conecta o botão ao método de fechar aplicação
-
-        # Layout do cabeçalho
         header_layout = QGridLayout(header_widget)
         header_layout.setContentsMargins(0, 0, 20, 0)
         header_layout.addWidget(self.config_button, 0, 0, alignment=Qt.AlignmentFlag.AlignRight)
-        header_layout.addWidget(self.close_button, 0, 1, alignment=Qt.AlignmentFlag.AlignRight)  # Adiciona o botão de fechar
         layout.addWidget(header_widget, 0, 1, 1, 1)
         
-        # Barra lateral esquerda com 5 linhas
+        # Barra lateral esquerda
         sidebar_widget = QWidget()
         sidebar_widget.setFixedSize(160, 710)
         sidebar_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
-        sidebar_layout = QVBoxLayout()
-        sidebar_layout.setContentsMargins(10, 10, 0, 10)
-        
-        # Adicionando linhas de texto na barra lateral
-        label = QLabel(f"Force values")
-        label.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 20px;")
-        label.setFixedSize(135, 50)
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sidebar_layout.addWidget(label, alignment = Qt.AlignmentFlag.AlignCenter)
-        for i in range(1, 6):
-            label = QLabel(f"Linha {i}")
-            label.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 18px;")
-            label.setFixedSize(80, 50)
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            sidebar_layout.addWidget(label, alignment = Qt.AlignmentFlag.AlignCenter)
-            LineEdit = QLineEdit(f"{i-10}")
-            LineEdit.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 16px;")
-            LineEdit.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            sidebar_layout.addWidget(LineEdit, alignment = Qt.AlignmentFlag.AlignCenter)
-            
-        
-        sidebar_widget.setLayout(sidebar_layout)
         layout.addWidget(sidebar_widget, 1, 0, 1, 1)
         
         # Layout da grade para os labels e gráficos
@@ -241,9 +199,6 @@ class MainWindow(QMainWindow):
             self.error_label.setText("Arquivo 'historico_leituras.json' não encontrado.")
 
         graph_canvas.draw()
-
-    def close_application(self):
-        self.close()
 
 # Execução da aplicação
 if __name__ == "__main__":

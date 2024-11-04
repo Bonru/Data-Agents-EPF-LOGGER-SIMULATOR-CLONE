@@ -17,13 +17,15 @@ class MyDataBank(DataBank):
         umi = int(normalvariate(45, 5)) #Register 1
         ten = int(normalvariate(350, 3)) #Register 2
         pot = int(normalvariate(770, 4)) #Register 3
-        vent = int(normalvariate(4, .5)) #Register 4
+        vent = int(normalvariate(4, .8)) #Register 4
         irrad = int(normalvariate(1100, 10)) #Register 5
         return [tem, umi, ten, pot, vent, irrad]
+    
 
     def get_holding_registers(self, address, number=1, srv_info=None):
         try:
             new_values = MyDataBank.new_values()
+            
             print(new_values)
             for i in range(len(new_values)):
                 self._h_regs[i] = new_values[i]
