@@ -83,6 +83,8 @@ class MainWindow(QMainWindow):
         sidebar_widget.setFixedSize(160, 710)
         sidebar_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
         sidebar_layout = QVBoxLayout()
+        self.line_edits = []  # Lista para armazenar os elementos LineEdit
+
         sidebar_layout.setContentsMargins(10, 10, 0, 10)
         
         # Adicionando linhas de texto na barra lateral
@@ -91,17 +93,26 @@ class MainWindow(QMainWindow):
         label.setFixedSize(135, 50)
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sidebar_layout.addWidget(label, alignment = Qt.AlignmentFlag.AlignCenter)
-        for i in range(1, 6):
-            label = QLabel(f"Linha {i}")
+        for i in range(1, 7):
+            try:
+                file_path = os.path.join(os.path.dirname(__file__), "lista.json")
+                if os.path.exists(file_path):
+                    with open(file_path, "r") as file:
+                        lista = json.load(file)
+                        if i < len(lista)+1:
+                            text = f"{lista[i-1][1]}"
+            except json.JSONDecodeError:
+                self.error_label.setText("Erro ao decodificar JSON de 'lista.json'")
+            label = QLabel(text)
             label.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 18px;")
-            label.setFixedSize(80, 50)
+            label.setFixedSize(100, 30)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             sidebar_layout.addWidget(label, alignment = Qt.AlignmentFlag.AlignCenter)
-            LineEdit = QLineEdit(f"{i-10}")
-            LineEdit.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 16px;")
-            LineEdit.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            sidebar_layout.addWidget(LineEdit, alignment = Qt.AlignmentFlag.AlignCenter)
-            
+            line_edit = QLineEdit(f"")
+            line_edit.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 16px;")
+            line_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            sidebar_layout.addWidget(line_edit, alignment = Qt.AlignmentFlag.AlignCenter)
+            self.line_edits.append(line_edit)  # Adiciona o LineEdit à lista
         
         sidebar_widget.setLayout(sidebar_layout)
         layout.addWidget(sidebar_widget, 1, 0, 1, 1)
@@ -154,6 +165,10 @@ class MainWindow(QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_numbers)
         self.timer.start(1500)
+
+        self.timer2 = QTimer(self)
+        self.timer2.timeout.connect(self.force_variable)
+        self.timer2.start(500)
         
         # Fundo claro
         self.setAutoFillBackground(True)
@@ -169,13 +184,17 @@ class MainWindow(QMainWindow):
         # Atualizar números no início
         self.update_numbers()
 
-        # Iniciar o script pymodbus_cliente.py
+        # Iniciar o script Pymodbus_Server.py
         self.process = QProcess(self)
-        self.process.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_cliente.py")])
+        self.process.started.connect(lambda: print("Pymodbus_Server.py started successfully"))
+        self.process.errorOccurred.connect(self.handleError)
+        self.process.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_Server.py")])
 
         # Iniciar o script pymodbus_cliente.py
         self.process2 = QProcess(self)
-        self.process2.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_Server.py")])
+        self.process2.started.connect(lambda: print("Pymodbus_cliente.py started successfully"))
+        self.process2.errorOccurred.connect(self.handleError)
+        self.process2.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_cliente.py")])
 
     def update_numbers(self):
         try:
@@ -242,8 +261,56 @@ class MainWindow(QMainWindow):
 
         graph_canvas.draw()
 
+    def force_variable(self):
+        try:
+            file_path = os.path.join(os.path.dirname(__file__), "lista.json")
+            historico_path = os.path.join(os.path.dirname(__file__), "historico_leituras.json")
+            
+            if os.path.exists(file_path):
+                with open(file_path, "r") as file:
+                    lista = json.load(file)
+                
+                # Atualiza os valores no arquivo lista.json com os valores dos LineEdit
+                for i, line_edit in enumerate(self.line_edits):
+                    if i < len(lista):
+                        if line_edit.text() != "":
+                            lista[i][0] = int(line_edit.text())
+                
+                with open(file_path, "w") as file:
+                    json.dump(lista, file)
+                
+                self.error_label.setText("")  # Limpar mensagem de erro
+            else:
+                self.error_label.setText("Arquivo 'lista.json' não encontrado.")
+            
+            if os.path.exists(historico_path):
+                with open(historico_path, "r") as file:
+                    historico = json.load(file)
+                
+                # Atualiza os valores no arquivo historico_leituras.json com os valores dos LineEdit
+                for i, line_edit in enumerate(self.line_edits):
+                    if i < len(lista):
+                        if line_edit.text() != "":
+                            data_type = lista[i][1]
+                            if data_type in historico:
+                                historico[data_type][-1] = int(line_edit.text())
+                
+                with open(historico_path, "w") as file:
+                    json.dump(historico, file)
+            
+            else:
+                self.error_label.setText("Arquivo 'historico_leituras.json' não encontrado.")
+        
+        except json.JSONDecodeError:
+            self.error_label.setText("Erro ao decodificar JSON de 'lista.json' ou 'historico_leituras.json'")
+        except ValueError:
+            self.error_label.setText("Erro ao converter valor para float.")
+
     def close_application(self):
         self.close()
+
+    def handleError(self, error):
+        print(f"Error occurred: {error}")
 
 # Execução da aplicação
 if __name__ == "__main__":

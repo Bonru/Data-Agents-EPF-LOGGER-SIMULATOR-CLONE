@@ -129,11 +129,11 @@ class MainWindow(QMainWindow):
 
         # Iniciar o script pymodbus_cliente.py
         self.process = QProcess(self)
-        self.process.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_cliente.py")])
+        self.process.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_Server.py")])
 
         # Iniciar o script pymodbus_cliente.py
         self.process2 = QProcess(self)
-        self.process2.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_Server.py")])
+        self.process2.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_cliente.py")])
 
     def update_numbers(self):
         try:

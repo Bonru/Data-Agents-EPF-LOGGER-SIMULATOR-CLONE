@@ -5,6 +5,7 @@ from collections import deque
 
 client = ModbusClient("localhost", 8080)
 lista = []
+valores_forcados = False  # Variável de controle
 
 # Armazenar as últimas 50 leituras para cada parâmetro usando deques (FIFO)
 historico_leituras = {
@@ -50,33 +51,34 @@ def armazenar_leitura(parametros):
     with open("historico_leituras.json", "w") as file:
         json.dump({chave: list(valores) for chave, valores in historico_leituras.items()}, file)
 
-
 def read_registers():
+    global valores_forcados
     try:
-        lista = client.read_holding_registers(0, 6)
-        if lista:
-            #adquirir os valores dos registradores
-            parametros = print_holding_registers(lista)
-            #armazenar os valores dos registradores
-            armazenar_leitura(parametros)
-            with open("lista.json", "w") as file:
-                json.dump(parametros, file)
+        if not valores_forcados:
+            lista = client.read_holding_registers(0, 6)
+            if lista:
+                #adquirir os valores dos registradores
+                parametros = print_holding_registers(lista)
+                #armazenar os valores dos registradores
+                armazenar_leitura(parametros)
+                with open("lista.json", "w") as file:
+                    json.dump(parametros, file)
+            else:
+                print("Erro ao ler registradores")
         else:
-            print("Erro ao ler registradores")
+            valores_forcados = False  # Resetar a variável de controle após usar os valores forçados
     except Exception as e:
         print(f"Error reading registers or writing to file: {e}")
 
     sleep(1.5)
 
 if __name__ == "__main__":
-    
     try:
         print("Abrindo cliente...")
         client.open()
         print("Cliente aberto\n")
         while True:
             read_registers()
-
     except Exception as e:
         print(f"Unexpected error: {e}")
         print("Fechando cliente...")
