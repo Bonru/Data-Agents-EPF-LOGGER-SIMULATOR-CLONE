@@ -4,26 +4,26 @@ import json
 from collections import deque
 
 class ModbusClientHandler:
-    def __init__(self, host="localhost", port=8080):
+    def __init__(self, host="localhost", port=552):
         self.client = ModbusClient(host, port)
         self.historico_leituras = {
+            "GHI": deque(maxlen=50),
+            "POA 1": deque(maxlen=50),
+            "Ref 30 Temp": deque(maxlen=50),
             "Temperatura": deque(maxlen=50),
             "Umidade": deque(maxlen=50),
-            "Tensão": deque(maxlen=50),
-            "Potência": deque(maxlen=50),
-            "Vel. vento": deque(maxlen=50),
-            "Irradiância": deque(maxlen=50)
+            "Vel. vento": deque(maxlen=50)
         }
 
     def print_holding_registers(self, lista):
         """Converte e exibe os valores dos registradores lidos."""
         parametros = [
+            [0, "GHI", "W/m²"], 
+            [0, "POA 1", "W/m²"], 
+            [0, "Ref 30 Temp", "°C"], 
             [0, "Temperatura", "°C"], 
             [0, "Umidade", "%"], 
-            [0, "Tensão", "kV"], 
-            [0, "Potência", "kW"], 
-            [0, "Vel. vento", "m/s"], 
-            [0, "Irradiância", "W/m²"]
+            [0, "Vel. vento", "m/s"]
         ]
         
         for k in range(len(lista)):
@@ -47,12 +47,12 @@ class ModbusClientHandler:
             pass  # Se o arquivo não existir, continue com os deques vazios
 
         # Adicionar as novas leituras aos deques
-        self.historico_leituras["Temperatura"].append(parametros[0][0])
-        self.historico_leituras["Umidade"].append(parametros[1][0])
-        self.historico_leituras["Tensão"].append(parametros[2][0])
-        self.historico_leituras["Potência"].append(parametros[3][0])
-        self.historico_leituras["Vel. vento"].append(parametros[4][0])
-        self.historico_leituras["Irradiância"].append(parametros[5][0])
+        self.historico_leituras["GHI"].append(parametros[0][0])
+        self.historico_leituras["POA 1"].append(parametros[1][0])
+        self.historico_leituras["Ref 30 Temp"].append(parametros[2][0])
+        self.historico_leituras["Temperatura"].append(parametros[3][0])
+        self.historico_leituras["Umidade"].append(parametros[4][0])
+        self.historico_leituras["Vel. vento"].append(parametros[5][0])
     
         # Salvar os deques atualizados no arquivo historico_leituras.json
         with open("historico_leituras.json", "w") as file:
@@ -64,6 +64,9 @@ class ModbusClientHandler:
             if lista:
                 #adquirir os valores dos registradores
                 parametros = self.print_holding_registers(lista)
+                #dividir o valor de todos os parametros por 10
+                for i in range(len(parametros)):
+                    parametros[i][0] /= 10
                 #armazenar os valores dos registradores
                 self.armazenar_leitura(parametros)
                 with open("lista.json", "w") as file:
