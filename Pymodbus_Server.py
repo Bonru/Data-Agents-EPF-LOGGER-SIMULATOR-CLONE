@@ -6,7 +6,7 @@ from pyModbusTCP.server import ModbusServer, DataBank
 
 logging.basicConfig()
 logging.getLogger('pyModbusTCP.server').setLevel(logging.DEBUG)
-df = pd.read_excel('medidas_copia.xlsx')
+df = pd.read_excel('Datalogger_data_28_11_2024_1.xlsx')
 
 class MyDataBank(DataBank):
     def __init__(self):

@@ -125,7 +125,6 @@ class MainWindow(QMainWindow):
                 else:
                     text = "N/A"
             except json.JSONDecodeError:
-                self.error_label.setText("Erro ao decodificar JSON de 'lista.json'")
                 text = "Erro"
 
             label = QLabel(text)
