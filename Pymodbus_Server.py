@@ -25,18 +25,26 @@ class MyDataBank(DataBank):
             return 0
         else:
             return int(float(value) *10)
-
+        
+    def treat_timestamp(self, value):
+        """Converte uma string no modelo XX:XX:XX para um inteiro."""
+        hora = value.split(':')
+        return int(hora[0])*3600 + int(hora[1])*60 + int(hora[2])
+        
     def new_values(self):
         parametros = self.sheet_values(self.leitura, df)
+
         ghi = abs(self.treat_data(parametros['ghi'])) # Register 0
         poa_1 = self.treat_data(parametros['poa_1']) # Register 1
         ref_30_temp = self.treat_data(parametros['ref_30_temp']) # Register 2
         temp_1 = self.treat_data(parametros['temp_1']) # Register 3
         umidade_higromet = self.treat_data(parametros['umidade_higromet']) # Register 4
         v_vento = self.treat_data(parametros['v_vento']) # Register 5
-        print(ghi, poa_1, ref_30_temp, temp_1, umidade_higromet, v_vento)
+        timestamp = self.treat_timestamp(parametros['TIME']) # Register 6
+
+        print(ghi, poa_1, ref_30_temp, temp_1, umidade_higromet, v_vento, timestamp)
         self.leitura += 1  #atualiza numero da leitura
-        return [ghi, poa_1, ref_30_temp, temp_1, umidade_higromet, v_vento]
+        return [ghi, poa_1, ref_30_temp, temp_1, umidade_higromet, v_vento, timestamp]
 
     def get_holding_registers(self, address, number=1, srv_info=None):
         try:
@@ -51,7 +59,7 @@ class MyDataBank(DataBank):
             return
 
 if __name__ == "__main__":
-    server = ModbusServer("localhost", 552, data_bank=MyDataBank())
+    server = ModbusServer("localhost", 8080, data_bank=MyDataBank())
 
     try:
         print("Ligando servidor...")

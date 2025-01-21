@@ -4,7 +4,7 @@ import json
 from collections import deque
 
 class ModbusClientHandler:
-    def __init__(self, host="localhost", port=552):
+    def __init__(self, host="localhost", port=8080):
         self.client = ModbusClient(host, port)
         self.historico_leituras = {
             "GHI": deque(maxlen=50),
@@ -12,7 +12,8 @@ class ModbusClientHandler:
             "Ref 30 Temp": deque(maxlen=50),
             "Temperatura": deque(maxlen=50),
             "Umidade": deque(maxlen=50),
-            "Vel. vento": deque(maxlen=50)
+            "Vel. vento": deque(maxlen=50),
+            "Timestamp": deque(maxlen=50)
         }
 
     def print_holding_registers(self, lista):
@@ -23,7 +24,8 @@ class ModbusClientHandler:
             [0, "Ref 30 Temp", "°C"], 
             [0, "Temperatura", "°C"], 
             [0, "Umidade", "%"], 
-            [0, "Vel. vento", "m/s"]
+            [0, "Vel. vento", "m/s"],
+            [0, "Timestamp", "s"]
         ]
         
         for k in range(len(lista)):
@@ -53,14 +55,26 @@ class ModbusClientHandler:
         self.historico_leituras["Temperatura"].append(parametros[3][0])
         self.historico_leituras["Umidade"].append(parametros[4][0])
         self.historico_leituras["Vel. vento"].append(parametros[5][0])
+        
+        # Converter Timestamp de segundos para hora:minuto:segundo
+        timestamp_seconds = parametros[6][0]
+        timestamp_hms = self.convert_seconds_to_hms(timestamp_seconds)
+        self.historico_leituras["Timestamp"].append(timestamp_hms)
     
         # Salvar os deques atualizados no arquivo historico_leituras.json
         with open("historico_leituras.json", "w") as file:
             json.dump({chave: list(valores) for chave, valores in self.historico_leituras.items()}, file)
 
+    def convert_seconds_to_hms(self, seconds):
+        """Converte segundos para o formato hora:minuto:segundo."""
+        hours = int(seconds // 3600)
+        minutes = int((seconds % 3600) // 60)
+        seconds = int(seconds % 60)
+        return f"{hours:02}:{minutes:02}:{seconds:02}"
+
     def read_registers(self):
         try:
-            lista = self.client.read_holding_registers(0, 6)
+            lista = self.client.read_holding_registers(0, 7)
             if lista:
                 #adquirir os valores dos registradores
                 parametros = self.print_holding_registers(lista)

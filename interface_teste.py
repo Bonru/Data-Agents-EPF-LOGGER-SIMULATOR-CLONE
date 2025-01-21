@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QGridLayout, QLabel, QPushButton, QVBoxLayout, QLineEdit
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QGridLayout, QLabel, QVBoxLayout, QPushButton, QScrollArea, QLineEdit, QSizePolicy
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtCore import Qt, QTimer, QProcess
 from PyQt6.QtGui import QPalette
@@ -25,7 +25,6 @@ class MainWindow(QMainWindow):
         
         # Retângulo azul superior esquerdo com título
         admin_label = QLabel("Admin")
-        admin_label.setFixedSize(160, 90)
         admin_label.setStyleSheet("background-color: #4a90e2; color: #ffffff; border-radius: 10px; padding: 10px;")
         font = QFont()
         font.setPixelSize(40)
@@ -35,7 +34,6 @@ class MainWindow(QMainWindow):
         
         # Barra superior com botão "toggle"
         header_widget = QWidget()
-        header_widget.setFixedSize(1220, 90)
         header_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
         
         # Botão toggle para alternar entre dados e gráficos
@@ -88,7 +86,6 @@ class MainWindow(QMainWindow):
         
         # Barra lateral esquerda com 5 linhas
         sidebar_widget = QWidget()
-        sidebar_widget.setFixedSize(160, 700)
         sidebar_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
         sidebar_layout = QVBoxLayout()
         self.line_edits = []  # Lista para armazenar os elementos LineEdit
@@ -97,15 +94,13 @@ class MainWindow(QMainWindow):
         
         # Adicionando titulo na barra lateral
         label = QLabel(f"Inserção manual")
-        label.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 18px;")
-        label.setFixedSize(135, 50)
+        label.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 18px; border-radius: 10px; padding: 10px;")
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sidebar_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Definindo estilos e tamanhos padronizados
-        label_style = "background-color: #ffffff; color: #4a90e2; font-size: 18px;"
+        label_style = "background-color: #ffffff; color: #4a90e2; font-size: 18px; border-radius: 10px; padding: 5px;"
         line_edit_style = "background-color: #ffffff; color: #4a90e2; font-size: 16px;"
-        fixed_size = (120, 30)
         max_length = 6  # Definindo o limite de caracteres
 
         # Ajustando o espaçamento do layout
@@ -125,18 +120,15 @@ class MainWindow(QMainWindow):
                 else:
                     text = "N/A"
             except json.JSONDecodeError:
-                self.error_label.setText("Erro ao decodificar JSON de 'lista.json'")
                 text = "Erro"
 
             label = QLabel(text)
             label.setStyleSheet(label_style)
-            label.setFixedSize(*fixed_size)
             label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             sidebar_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignCenter)
 
             line_edit = QLineEdit("")
             line_edit.setStyleSheet(line_edit_style)
-            line_edit.setFixedSize(*fixed_size)
             line_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
             line_edit.setMaxLength(max_length)  # Definindo o limite de caracteres
             line_edit.setValidator(QIntValidator())  # Permitindo apenas entrada de números
@@ -148,54 +140,65 @@ class MainWindow(QMainWindow):
         sidebar_widget.setLayout(sidebar_layout)
         layout.addWidget(sidebar_widget, 1, 0, 1, 1)
         
-        # Layout da grade para os labels e gráficos
-        self.grid_widget = QWidget()
-        self.grid_layout = QGridLayout()
-        self.grid_layout.setSpacing(20)
-        
+        # Área de rolagem para os gráficos e labels
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_content = QWidget()
+        scroll_layout = QGridLayout(scroll_content)
+        scroll_layout.setSpacing(20)
+
         # Listas para armazenar labels e gráficos
         self.labels = []
         self.graphs = []
-        
-        # Preenchendo a grade com widgets de labels e gráficos
-        for row in range(3):
-            for col in range(2):
-                # Widget para gráfico com canvas do matplotlib
-                graph_canvas = FigureCanvas(plt.Figure(figsize=(5, 4)))
-                graph_canvas.setFixedSize(500, 200)
-                self.graphs.append(graph_canvas)
-                
-                # Widget com label para exibir texto
-                rect_widget = QWidget()
-                rect_widget.setFixedSize(500, 120)
-                rect_widget.setStyleSheet("background-color: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 10px;")
-                
-                label = QLabel("Texto Inicial")
-                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-                label.setStyleSheet("color: #333333;")
-                font = QFont()
-                font.setPixelSize(22)
-                label.setFont(font)
-                
-                self.labels.append(label)
-                
-                # Layout para o label e adição ao widget
-                rect_layout = QGridLayout(rect_widget)
-                rect_layout.setContentsMargins(0, 0, 0, 0)
-                rect_layout.addWidget(label, 0, 0)
-                
-                # Adicionar widgets ao grid
-                self.grid_layout.addWidget(rect_widget, row, col)
-                self.grid_layout.addWidget(graph_canvas, row, col)
-                graph_canvas.hide()  # Ocultar gráficos inicialmente
-                
-        self.grid_widget.setLayout(self.grid_layout)
-        layout.addWidget(self.grid_widget, 1, 1, 1, 1)
+        self.buttons = []
+
+        # Preenchendo a área de rolagem com widgets de labels e gráficos
+        for i in range(6):  # Número de conjuntos de gráficos e labels
+            # Widget para gráfico com canvas do matplotlib
+            graph_canvas = FigureCanvas(plt.Figure(figsize=(5, 2)))
+            ax = graph_canvas.figure.add_subplot(111)
+            ax.plot([1, 2, 3], [1, 4, 9], label="Exemplo")
+            ax.legend()
+            graph_canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            graph_canvas.setFixedHeight(400)
+            graph_canvas.setVisible(False)  # Inicialmente invisível
+            self.graphs.append(graph_canvas)
+
+            # Widget com label para exibir texto
+            rect_widget = QWidget()
+            rect_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+            rect_widget.setMaximumHeight(120)
+            rect_widget.setStyleSheet("background-color: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 10px;")
+
+            label = QLabel("Texto Inicial")
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setStyleSheet("color: #333333;")
+            font = QFont()
+            font.setPixelSize(22)
+            label.setFont(font)
+
+            self.labels.append(label)
+
+            # Layout para o label e botão
+            rect_layout = QVBoxLayout(rect_widget)
+            rect_layout.setContentsMargins(0, 0, 0, 0)
+            rect_layout.addWidget(label)
+
+            # Adicionar label e gráfico ao layout de rolagem
+            row = i // 2
+            col = i % 2
+            scroll_layout.addWidget(rect_widget, row * 2, col)
+            scroll_layout.addWidget(graph_canvas, row * 2 + 1, col)
+
+        scroll_content.setLayout(scroll_layout)
+        scroll_area.setWidget(scroll_content)
+        layout.addWidget(scroll_area, 1, 1, 1, 1)
         
         # Configuração do timer para atualizar números
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.force_variable)
         self.timer.timeout.connect(self.update_numbers)
+        self.timer.timeout.connect(self.timeout)
         self.timer.start(1500)
 
         
@@ -215,11 +218,14 @@ class MainWindow(QMainWindow):
 
         # Iniciar o script Pymodbus_Server.py
         self.process = QProcess(self)
-        self.process.start("python", [os.path.join(os.path.dirname(__file__), "Pymodbus_Server.py")])
+        self.process.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_Server.py")])
 
         # Iniciar o script pymodbus_cliente.py
         self.process2 = QProcess(self)
-        self.process2.start("python", [os.path.join(os.path.dirname(__file__), "Pymodbus_cliente.py")])
+        self.process2.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_cliente.py")])
+
+    def timeout(self):
+            print("timeout")
 
     def update_numbers(self):
         try:
@@ -261,10 +267,10 @@ class MainWindow(QMainWindow):
         fig = graph_canvas.figure
         ax.clear()
 
-        #apaga a figura anterior
+        # Apaga a figura anterior
         fig.clear()
 
-        #cria um novo eixo pra figura
+        # Cria um novo eixo para a figura
         ax = fig.add_subplot(111)
         
         file_path = os.path.join(os.path.dirname(__file__), "historico_leituras.json")
@@ -274,11 +280,21 @@ class MainWindow(QMainWindow):
                 dados = json.load(file)
                 
                 if data_type in dados:
-                    x = list(range(len(dados[data_type])))
+                    x = dados["Timestamp"]
                     y = dados[data_type]
                     ax.plot(x, y, marker='o')
                     ax.set_title(f"Gráfico de {data_type}")
-                    ax.set_xlabel("Tempo")
+                    ax.set_xlabel("Horário")
+                    
+                    # Definir ticks do eixo x para mostrar apenas 5 valores igualmente espaçados
+                    num_ticks = 4
+                    if len(x) > num_ticks:
+                        tick_positions = [x[i] for i in range(0, len(x), len(x) // num_ticks)]
+                        ax.set_xticks(tick_positions)
+                        ax.set_xticklabels([x[i] for i in range(0, len(x), len(x) // num_ticks)])
+                    else:
+                        ax.set_xticks(x)
+                        ax.set_xticklabels(x)
                 else:
                     self.error_label.setText(f"Dados de {data_type} não encontrados no arquivo JSON.")
         else:
@@ -334,11 +350,34 @@ class MainWindow(QMainWindow):
     def close_application(self):
         self.close()
 
-    def handleError(self, error):
-        print(f"Error occurred: {error}")
+    def toggle_graph(self, index):
+        # Alternar a visibilidade do gráfico correspondente ao botão
+        graph = self.graphs[index]
+        graph.setVisible(not graph.isVisible())
+        # Atualizar o texto do botão
+        if graph.isVisible():
+            self.buttons[index].setText("Ocultar Gráfico")
+        else:
+            self.buttons[index].setText("Exibir Gráfico")
 
 # Execução da aplicação
 if __name__ == "__main__":
+
+    #Limpar dados ao iniciar
+
+    # Arquivo a ser apagado ao iniciar
+    file_to_delete = "historico_leituras.json"
+
+    # Apagar o arquivo, se existir
+    if os.path.exists(file_to_delete):
+        try:
+            os.remove(file_to_delete)
+            print(f"Arquivo '{file_to_delete}' apagado com sucesso.")
+        except Exception as e:
+            print(f"Erro ao tentar apagar o arquivo '{file_to_delete}': {e}")
+    else:
+        print(f"Arquivo '{file_to_delete}' não encontrado.")
+
     app = QApplication(sys.argv)
     window = MainWindow()
     window.show()
