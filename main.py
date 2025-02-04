@@ -1,16 +1,28 @@
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QGridLayout, QLabel, QPushButton, QVBoxLayout, QLineEdit
 from PyQt6.QtGui import QColor, QFont
-from PyQt6.QtCore import Qt, QTimer, QProcess
+from PyQt6.QtCore import Qt, QTimer, QProcess, QThread
 from PyQt6.QtGui import QPalette
 import sys, os, json
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt6.QtGui import QIntValidator
+from Pymodbus_cliente import ModbusClientHandler
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         
+        # Intervalo de atualização de dados
+        self.intervalo = 1500
+
+        # Iniciar o script pymodbus_cliente.py
+        self.client = ModbusClientHandler()
+        self.thread = QThread()
+        self.client.moveToThread(self.thread)
+        self.thread.started.connect(self.client.start)
+        self.thread.start()
+
         # Configuração da janela principal
         self.setWindowTitle("Interface Datalogger")
         self.setGeometry(100, 100, 1440, 810)
@@ -113,19 +125,8 @@ class MainWindow(QMainWindow):
         sidebar_layout.addWidget(QWidget(), alignment=Qt.AlignmentFlag.AlignCenter) #espaçamento
 
         for i in range(1, 7):
-            try:
-                file_path = os.path.join(os.path.dirname(__file__), "lista.json")
-                if os.path.exists(file_path):
-                    with open(file_path, "r") as file:
-                        lista = json.load(file)
-                        if i < len(lista) + 1:
-                            text = f"{lista[i - 1][1]}"
-                        else:
-                            text = "N/A"
-                else:
-                    text = "N/A"
-            except json.JSONDecodeError:
-                text = "Erro"
+            lista = self.client.getdata()
+            text = f"{lista[i - 1][1]}"
 
             label = QLabel(text)
             label.setStyleSheet(label_style)
@@ -195,7 +196,7 @@ class MainWindow(QMainWindow):
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.force_variable)
         self.timer.timeout.connect(self.update_numbers)
-        self.timer.start(1500)
+        self.timer.start(self.intervalo)
 
         
         # Fundo claro
@@ -212,34 +213,20 @@ class MainWindow(QMainWindow):
         # Atualizar números no início
         self.update_numbers()
 
-        # Iniciar o script Pymodbus_Server.py
-        self.process = QProcess(self)
-        self.process.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_Server.py")])
-
-        # Iniciar o script pymodbus_cliente.py
-        self.process2 = QProcess(self)
-        self.process2.start("python3", [os.path.join(os.path.dirname(__file__), "Pymodbus_cliente.py")])
-
     def update_numbers(self):
         try:
-            file_path = os.path.join(os.path.dirname(__file__), "lista.json")
-            
-            if os.path.exists(file_path):
-                with open(file_path, "r") as file:
-                    lista = json.load(file)
-                    
-                    for i, label in enumerate(self.labels):
-                        if i < len(lista):
-                            text = f"{lista[i][1]}: {lista[i][0]} {lista[i][2]}"
-                            label.setText(text) #atualiza o texto correspondente
-                            self.display_graph(self.graphs[i], label.text().split(":")[0]) #atualizar o gráfico correspondente
-                self.error_label.setText("")  # Limpar mensagem de erro
-            else:
-                self.error_label.setText("Arquivo 'lista.json' não encontrado.")
-        
-        except json.JSONDecodeError:
-            self.error_label.setText("Erro ao decodificar JSON de 'lista.json'")
-            
+            self.client.read_registers()
+            lista = self.client.getdata()
+            self.force_variable()
+            for i, label in enumerate(self.labels):
+                text = f"{lista[i][1]}: {lista[i][0]} {lista[i][2]}"
+                label.setText(text)  # Atualiza o texto correspondente
+                self.display_graph(self.graphs[i], label.text().split(":")[0])  # Atualizar o gráfico correspondente
+            self.error_label.setText("")  # Limpar mensagem de erro
+        except Exception as e:
+            self.handleError(e)
+            self.error_label.setText(f"Erro ao atualizar os números: {e}")
+
     def toggle_view(self):
         if self.labels[0].isVisible():
             # Oculta os labels e exibe gráficos
@@ -266,67 +253,44 @@ class MainWindow(QMainWindow):
         #cria um novo eixo pra figura
         ax = fig.add_subplot(111)
         
-        file_path = os.path.join(os.path.dirname(__file__), "historico_leituras.json")
-        
-        if os.path.exists(file_path):
-            with open(file_path, "r") as file:
-                dados = json.load(file)
-                
-                if data_type in dados:
-                    x = list(range(len(dados[data_type])))
-                    y = dados[data_type]
-                    ax.plot(x, y, marker='o')
-                    ax.set_title(f"Gráfico de {data_type}")
-                    ax.set_xlabel("Tempo")
-                else:
-                    self.error_label.setText(f"Dados de {data_type} não encontrados no arquivo JSON.")
+        #gerar os gráficos com base no self.historico leituras
+        dados = self.client.historico_leituras
+        if data_type in dados:
+            x = list(range(len(dados[data_type])))
+            y = dados[data_type]
+            ax.plot(x, y, marker='o')
+            ax.set_title(f"Gráfico de {data_type}")
+            ax.set_xlabel("Tempo")
         else:
-            self.error_label.setText("Arquivo 'historico_leituras.json' não encontrado.")
+            self.error_label.setText(f"Dados de {data_type} não encontrados.")
 
         graph_canvas.draw()
 
     def force_variable(self):
         try:
-            file_path = os.path.join(os.path.dirname(__file__), "lista.json")
-            historico_path = os.path.join(os.path.dirname(__file__), "historico_leituras.json")
+            # Obtém os dados do cliente
+            lista = self.client.getdata()
             
-            if os.path.exists(file_path):
-                with open(file_path, "r") as file:
-                    lista = json.load(file)
-                
-                # Atualiza os valores no arquivo lista.json com os valores dos LineEdit
-                for i, line_edit in enumerate(self.line_edits):
-                    if i < len(lista):
-                        if line_edit.text() != "":
-                            lista[i][0] = int(line_edit.text())
-                
-                with open(file_path, "w") as file:
-                    json.dump(lista, file)
-                
-                self.error_label.setText("")  # Limpar mensagem de erro
-            else:
-                self.error_label.setText("Arquivo 'lista.json' não encontrado.")
+            # Atualiza os valores em self.parametros com os valores dos LineEdit
+            for i, line_edit in enumerate(self.line_edits):
+                if i < len(lista):
+                    if line_edit.text() != "":
+                        lista[i][0] = int(line_edit.text())
             
-            if os.path.exists(historico_path):
-                with open(historico_path, "r") as file:
-                    historico = json.load(file)
-                
-                # Atualiza os valores no arquivo historico_leituras.json com os valores dos LineEdit
-                for i, line_edit in enumerate(self.line_edits):
-                    if i < len(lista):
-                        if line_edit.text() != "":
-                            data_type = lista[i][1]
-                            if data_type in historico:
-                                historico[data_type][-1] = int(line_edit.text())
-                
-                with open(historico_path, "w") as file:
-                    json.dump(historico, file)
+            # Atualiza parametros e historico de leituras
+            self.parametros = lista
+            self.historico_leituras = self.client.gethistorico()
             
-            else:
-                self.error_label.setText("Arquivo 'historico_leituras.json' não encontrado.")
+            # Atualiza os valores em self.historico_leituras com os valores dos LineEdit
+            for i, line_edit in enumerate(self.line_edits):
+                if i < len(lista):
+                    if line_edit.text() != "":
+                        data_type = lista[i][1]
+                        if data_type in self.historico_leituras:
+                            self.historico_leituras[data_type][-1] = int(line_edit.text())
+            
+            self.error_label.setText("")  # Limpar mensagem de erro
         
-        except json.JSONDecodeError:
-            self.error_label.setText("Erro ao decodificar JSON de 'lista.json' ou 'historico_leituras.json'")
         except ValueError:
             self.error_label.setText("Erro ao converter valor para float.")
 
