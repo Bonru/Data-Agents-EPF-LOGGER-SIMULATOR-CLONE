@@ -18,6 +18,7 @@ class SolarPlatformMonitor:
         self.leitura = 0
         self.df = pd.read_excel(excel_file)
 
+    # Função para formatar os dados
     def treat_data(self, data):
         for key, value in data.items():
             if isinstance(value, str):
@@ -45,6 +46,7 @@ class SolarPlatformMonitor:
             print(f"Erro: {e}")
     """
 
+    # Função para atualizar os dados no servidor http
     def patch_data(self, key, data):
         try:
             patch_url = f"{self.url.rstrip('.json')}/{key}.json"
@@ -61,6 +63,7 @@ class SolarPlatformMonitor:
         row = self.df.iloc[n_leitura].to_dict()
         return row
 
+    # Função que retorna os novos parametros
     def new_values(self):
         parametros = self.sheet_values(self.leitura)
         if CORRIGIR:

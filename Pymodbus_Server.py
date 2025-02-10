@@ -17,6 +17,7 @@ class MyDataBank(DataBank):
         row = df.iloc[n_leitura].to_dict()
         return row
     
+    # Função para formatar os dados
     def treat_data(self, value):
         """Converte uma string com vírgula para um inteiro."""
         if isinstance(value, str):
@@ -26,11 +27,13 @@ class MyDataBank(DataBank):
         else:
             return int(float(value) *10)
         
+    # Função para formatar o timestamp para segundos
     def treat_timestamp(self, value):
         """Converte uma string no modelo XX:XX:XX para um inteiro."""
         hora = value.split(':')
         return int(hora[0])*3600 + int(hora[1])*60 + int(hora[2])
         
+    # Função para retornar os novos valores da proxima consulta na planilha
     def new_values(self):
         parametros = self.sheet_values(self.leitura, df)
 
@@ -46,6 +49,7 @@ class MyDataBank(DataBank):
         self.leitura += 1  #atualiza numero da leitura
         return [ghi, poa_1, ref_30_temp, temp_1, umidade_higromet, v_vento, timestamp]
 
+    # Função para retornar os valores dos registradores
     def get_holding_registers(self, address, number=1, srv_info=None):
         try:
             new_values = self.new_values()

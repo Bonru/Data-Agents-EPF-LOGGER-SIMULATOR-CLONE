@@ -66,12 +66,12 @@ class ModbusClientHandler(QObject):
         try:
             lista = self.client.read_holding_registers(0, 7)
             if lista:
-                #adquirir os valores dos registradores
+                # Adquirir os valores dos registradores
                 self.parametros = self.print_holding_registers(lista)
-                #dividir o valor de todos os parametros por 10
+                # Dividir o valor de todos os parametros por 10
                 for i in range(len(self.parametros)):
                     self.parametros[i][0] /= 10
-                #armazenar os valores dos registradores
+                # Armazenar os valores dos registradores
                 self.armazenar_leitura(self.parametros)
         except Exception as e:
             print(f"Erro ao tentar ler os registradores: {e}")
@@ -87,8 +87,7 @@ class ModbusClientHandler(QObject):
             print("Abrindo cliente...")
             self.client.open()
             print("Cliente aberto\n")
-            #while True:
-                #self.read_registers()
+
         except Exception as e:
             print(f"Unexpected error: {e}")
             print("Fechando cliente...")

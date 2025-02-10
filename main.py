@@ -82,7 +82,7 @@ class MainWindow(QMainWindow):
                 background-color: #e0e0e0;
             }
         """)
-        self.close_button.clicked.connect(self.close_application)  # Conecta o botão ao método de fechar aplicação
+        self.close_button.clicked.connect(self.close_application) 
 
         # Layout do cabeçalho
         header_layout = QGridLayout(header_widget)
@@ -103,7 +103,7 @@ class MainWindow(QMainWindow):
         sidebar_widget.setFixedSize(160, 700)
         sidebar_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
         sidebar_layout = QVBoxLayout()
-        self.line_edits = []  # Lista para armazenar os elementos LineEdit
+        self.line_edits = []
 
         sidebar_layout.setContentsMargins(10, 10, 10, 10)
         
@@ -121,8 +121,8 @@ class MainWindow(QMainWindow):
         max_length = 6  # Definindo o limite de caracteres
 
         # Ajustando o espaçamento do layout
-        sidebar_layout.setSpacing(5)  # Define o espaçamento vertical entre os widgets
-        sidebar_layout.addWidget(QWidget(), alignment=Qt.AlignmentFlag.AlignCenter) #espaçamento
+        sidebar_layout.setSpacing(5)
+        sidebar_layout.addWidget(QWidget(), alignment=Qt.AlignmentFlag.AlignCenter)
 
         for i in range(1, 7):
             lista = self.client.getdata()
@@ -192,7 +192,7 @@ class MainWindow(QMainWindow):
         self.grid_widget.setLayout(self.grid_layout)
         layout.addWidget(self.grid_widget, 1, 1, 1, 1)
         
-        # Configuração do timer para atualizar números
+        # Configuração do timer para atualizar os parametros
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.force_variable)
         self.timer.timeout.connect(self.update_numbers)
@@ -213,6 +213,7 @@ class MainWindow(QMainWindow):
         # Atualizar números no início
         self.update_numbers()
 
+    # Método para atualizar os números exibidos
     def update_numbers(self):
         try:
             self.client.read_registers()
@@ -222,11 +223,12 @@ class MainWindow(QMainWindow):
                 text = f"{lista[i][1]}: {lista[i][0]} {lista[i][2]}"
                 label.setText(text)  # Atualiza o texto correspondente
                 self.display_graph(self.graphs[i], label.text().split(":")[0])  # Atualizar o gráfico correspondente
-            self.error_label.setText("")  # Limpar mensagem de erro
+            self.error_label.setText("")
         except Exception as e:
             self.handleError(e)
             self.error_label.setText(f"Erro ao atualizar os números: {e}")
 
+    # Método para alternar entre exibição de dados e gráficos
     def toggle_view(self):
         if self.labels[0].isVisible():
             # Oculta os labels e exibe gráficos
@@ -242,18 +244,19 @@ class MainWindow(QMainWindow):
                 self.config_button.setText("Exibir Gráfico")
                 label.show()
 
+    # Método para exibir gráficos
     def display_graph(self, graph_canvas, data_type):
         ax = graph_canvas.figure.subplots()
         fig = graph_canvas.figure
         ax.clear()
 
-        #apaga a figura anterior
+        # Apaga a figura anterior
         fig.clear()
 
-        #cria um novo eixo pra figura
+        # Cria um novo eixo pra figura
         ax = fig.add_subplot(111)
         
-        #gerar os gráficos com base no self.historico leituras
+        # Gerar o gráfico
         dados = self.client.historico_leituras
         if data_type in dados:
             x = list(range(len(dados[data_type])))
@@ -266,9 +269,9 @@ class MainWindow(QMainWindow):
 
         graph_canvas.draw()
 
+    # Método para forçar a atualização dos valores
     def force_variable(self):
         try:
-            # Obtém os dados do cliente
             lista = self.client.getdata()
             
             # Atualiza os valores em self.parametros com os valores dos LineEdit
@@ -276,8 +279,6 @@ class MainWindow(QMainWindow):
                 if i < len(lista):
                     if line_edit.text() != "":
                         lista[i][0] = int(line_edit.text())
-            
-            # Atualiza parametros e historico de leituras
             self.parametros = lista
             self.historico_leituras = self.client.gethistorico()
             
@@ -298,7 +299,7 @@ class MainWindow(QMainWindow):
         self.close()
 
     def handleError(self, error):
-        print(f"Error occurred: {error}")
+        print(f"Ocorreu um erro: {error}")
 
 # Execução da aplicação
 if __name__ == "__main__":
