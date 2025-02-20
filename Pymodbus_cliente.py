@@ -30,7 +30,8 @@ class ModbusClientHandler(QObject):
     def print_holding_registers(self, lista):
         """Converte e exibe os valores dos registradores lidos."""      
         for k in range(len(lista)):
-            print(f"{self.parametros[k][1]}: {lista[k]:.1f} {self.parametros[k][2]}")
+            #print(f"{self.parametros[k][1]}: {lista[k]:.1f} {self.parametros[k][2]}")
+            pass
         print(self.parametros)
         print()
             
@@ -61,6 +62,13 @@ class ModbusClientHandler(QObject):
         minutes = int((seconds % 3600) // 60)
         seconds = int(seconds % 60)
         return f"{hours:02}:{minutes:02}:{seconds:02}"
+
+    def write_register(self, endereco=3, newvalue=0):
+        try:
+            self.client.write_single_register(endereco, newvalue)
+            print(self.client.write_single_register(endereco, newvalue))
+        except Exception as e:
+            print(f"Erro ao tentar escrever no registrador: {e}")
 
     def read_registers(self):
         try:

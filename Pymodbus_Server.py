@@ -3,15 +3,22 @@
 import logging
 import pandas as pd
 from pyModbusTCP.server import ModbusServer, DataBank
+import threading
+import time
 
 logging.basicConfig()
 logging.getLogger('pyModbusTCP.server').setLevel(logging.DEBUG)
-df = pd.read_excel('Datalogger_data_28_11_2024_1.xlsx')
+df = pd.read_excel('Datalogger_28_11_2024.xlsx')
 
 class MyDataBank(DataBank):
     def __init__(self):
         super().__init__()
         self.leitura = 0
+        self.lista = []
+        self.start(0)
+        self.update_thread = threading.Thread(target=self.update_values_periodically)
+        self.update_thread.daemon = True
+        self.update_thread.start()
 
     def sheet_values(self, n_leitura, df):
         row = df.iloc[n_leitura].to_dict()
@@ -47,20 +54,35 @@ class MyDataBank(DataBank):
 
         print(ghi, poa_1, ref_30_temp, temp_1, umidade_higromet, v_vento, timestamp)
         self.leitura += 1  #atualiza numero da leitura
+        
         return [ghi, poa_1, ref_30_temp, temp_1, umidade_higromet, v_vento, timestamp]
+
+    def update_values(self):
+        self.lista = self.new_values()
+        for i in range(len(self.lista)):
+            self._h_regs[i] = self.lista[i]
+        return self.lista
+
+    def update_values_periodically(self):
+        while True:
+            self.update_values()
+            time.sleep(1.5)
 
     # Função para retornar os valores dos registradores
     def get_holding_registers(self, address, number=1, srv_info=None):
         try:
-            new_values = self.new_values()
-            
-            print(new_values)
-            for i in range(len(new_values)):
-                self._h_regs[i] = new_values[i]
             return [self._h_regs[i] for i in range(address, address + number)]
-        
+
         except KeyError:
             return
+
+    def start(self, address, number=1, srv_info=None):
+        self.lista = self.new_values()
+        for i in range(len(self.lista)):
+            self._h_regs[i] = self.lista[i]
+        self.clone = self._h_regs.copy()
+        return [self._h_regs[i] for i in range(address, address + number)]
+
 
 if __name__ == "__main__":
     server = ModbusServer("localhost", 8080, data_bank=MyDataBank())

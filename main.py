@@ -15,7 +15,6 @@ class MainWindow(QMainWindow):
         
         # Intervalo de atualização de dados
         self.intervalo = 1500
-
         # Iniciar o script pymodbus_cliente.py
         self.client = ModbusClientHandler()
         self.thread = QThread()
@@ -194,7 +193,6 @@ class MainWindow(QMainWindow):
         
         # Configuração do timer para atualizar os parametros
         self.timer = QTimer(self)
-        self.timer.timeout.connect(self.force_variable)
         self.timer.timeout.connect(self.update_numbers)
         self.timer.start(self.intervalo)
 
@@ -216,9 +214,9 @@ class MainWindow(QMainWindow):
     # Método para atualizar os números exibidos
     def update_numbers(self):
         try:
+            self.force_variable()
             self.client.read_registers()
             lista = self.client.getdata()
-            self.force_variable()
             for i, label in enumerate(self.labels):
                 text = f"{lista[i][1]}: {lista[i][0]} {lista[i][2]}"
                 label.setText(text)  # Atualiza o texto correspondente
@@ -273,25 +271,15 @@ class MainWindow(QMainWindow):
     def force_variable(self):
         try:
             lista = self.client.getdata()
-            
+            aux = False
             # Atualiza os valores em self.parametros com os valores dos LineEdit
             for i, line_edit in enumerate(self.line_edits):
                 if i < len(lista):
                     if line_edit.text() != "":
-                        lista[i][0] = int(line_edit.text())
-            self.parametros = lista
-            self.historico_leituras = self.client.gethistorico()
-            
-            # Atualiza os valores em self.historico_leituras com os valores dos LineEdit
-            for i, line_edit in enumerate(self.line_edits):
-                if i < len(lista):
-                    if line_edit.text() != "":
-                        data_type = lista[i][1]
-                        if data_type in self.historico_leituras:
-                            self.historico_leituras[data_type][-1] = int(line_edit.text())
-            
-            self.error_label.setText("")  # Limpar mensagem de erro
-        
+                        new_value = (int(line_edit.text()) * 10)
+                        print("i", i, "New_value", new_value)
+                        self.client.write_register(i, new_value)
+
         except ValueError:
             self.error_label.setText("Erro ao converter valor para float.")
 
