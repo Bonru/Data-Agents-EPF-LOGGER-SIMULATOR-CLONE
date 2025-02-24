@@ -1,11 +1,10 @@
 # Logger_simulator
 
-"(+) Feito"   
-"(-) Falta fazer"
+## 04/02/2025
++ (+) Feitas algumas atualizações solicitadas na reunião do dia 04/02/2025
++ (+) Renomeação das planilhas de script do simulador
++ (+) Outras atualizações
 
-+ (+)Feitas algumas atualizações solicitadas na reunião do dia 04/02/2025
-+ (+)Renomeação das planilhas de script do simulador
-
-- (-)Aplicar demais alterações sugeridas na reunião
-- (-)Aplicar interface gráfica de interface_teste.py em main.py
-- (-)Correção de comentários e outras melhorias de código
+## 24/02/2025
++ (+) Servidor disponibiliza todos os dados da planilha. Mapeamento semelhante ao datalogger da FEEC
+- (-) Interface gráfica corrigida para comportar os novos parametros
