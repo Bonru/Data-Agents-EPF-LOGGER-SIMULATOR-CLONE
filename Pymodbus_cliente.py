@@ -9,21 +9,43 @@ class ModbusClientHandler(QObject):
         super().__init__()
         self.client = ModbusClient(host, port)
         self.historico_leituras = {
-            "GHI": deque(maxlen=50),
-            "POA 1": deque(maxlen=50),
-            "Ref 30 Temp": deque(maxlen=50),
-            "Temperatura": deque(maxlen=50),
-            "Umidade": deque(maxlen=50),
             "Vel. vento": deque(maxlen=50),
+            "Temperatura 1": deque(maxlen=50),
+            "Umidade Higrometro": deque(maxlen=50),
+            "Temperatura 2": deque(maxlen=50),
+            "Temp Higrometro": deque(maxlen=50),
+            "Ref Cel 40": deque(maxlen=50),
+            "Teste Cel 40": deque(maxlen=50),
+            "Ref Cel 30": deque(maxlen=50),
+            "Ref Cel 10": deque(maxlen=50),
+            "Ref 40 Temp": deque(maxlen=50),
+            "Ref 30 Temp": deque(maxlen=50),
+            "Ref 10 Temp": deque(maxlen=50),
+            "POA RI 2": deque(maxlen=50),
+            "POA 2": deque(maxlen=50),
+            "POA RI 1": deque(maxlen=50),
+            "POA 1": deque(maxlen=50),
+            "GHI": deque(maxlen=50),
             "Timestamp": deque(maxlen=50)
         }
         self.parametros = [
-            [0, "GHI", "W/m²"], 
-            [0, "POA 1", "W/m²"], 
-            [0, "Ref 30 Temp", "°C"], 
-            [0, "Temperatura", "°C"], 
-            [0, "Umidade", "%"], 
             [0, "Vel. vento", "m/s"],
+            [0, "Temperatura 1", "°C"],
+            [0, "Umidade Higrometro", "%"],
+            [0, "Temperatura 2", "°C"],
+            [0, "Temp Higrometro", "°C"],
+            [0, "Ref Cel 40", "W/m²"],
+            [0, "Teste Cel 40", "°C"],
+            [0, "Ref Cel 30", "W/m²"],
+            [0, "Ref Cel 10", "W/m²"],
+            [0, "Ref 40 Temp", "°C"],
+            [0, "Ref 30 Temp", "°C"],
+            [0, "Ref 10 Temp", "°C"],
+            [0, "POA RI 2", "W/m²"],
+            [0, "POA 2", "W/m²"],
+            [0, "POA RI 1", "W/m²"],
+            [0, "POA 1", "W/m²"],
+            [0, "GHI", "W/m²"],
             [0, "Timestamp", "s"]
         ]
 
@@ -44,15 +66,26 @@ class ModbusClientHandler(QObject):
         """Armazena cada nova leitura no histórico, mantendo apenas as últimas 50 leituras."""
         
         # Adicionar as novas leituras aos deques
-        self.historico_leituras["GHI"].append(parametros[0][0])
-        self.historico_leituras["POA 1"].append(parametros[1][0])
-        self.historico_leituras["Ref 30 Temp"].append(parametros[2][0])
-        self.historico_leituras["Temperatura"].append(parametros[3][0])
-        self.historico_leituras["Umidade"].append(parametros[4][0])
-        self.historico_leituras["Vel. vento"].append(parametros[5][0])
+        self.historico_leituras["Vel. vento"].append(parametros[0][0])
+        self.historico_leituras["Temperatura 1"].append(parametros[1][0])
+        self.historico_leituras["Umidade Higrometro"].append(parametros[2][0])
+        self.historico_leituras["Temperatura 2"].append(parametros[3][0])
+        self.historico_leituras["Temp Higrometro"].append(parametros[4][0])
+        self.historico_leituras["Ref Cel 40"].append(parametros[5][0])
+        self.historico_leituras["Teste Cel 40"].append(parametros[6][0])
+        self.historico_leituras["Ref Cel 30"].append(parametros[7][0])
+        self.historico_leituras["Ref Cel 10"].append(parametros[8][0])
+        self.historico_leituras["Ref 40 Temp"].append(parametros[9][0])
+        self.historico_leituras["Ref 30 Temp"].append(parametros[10][0])
+        self.historico_leituras["Ref 10 Temp"].append(parametros[11][0])
+        self.historico_leituras["POA RI 2"].append(parametros[12][0])
+        self.historico_leituras["POA 2"].append(parametros[13][0])
+        self.historico_leituras["POA RI 1"].append(parametros[14][0])
+        self.historico_leituras["POA 1"].append(parametros[15][0])
+        self.historico_leituras["GHI"].append(parametros[16][0])
         
         # Converter Timestamp de segundos para hora:minuto:segundo
-        timestamp_seconds = parametros[6][0]
+        timestamp_seconds = parametros[17][0]
         timestamp_hms = self.convert_seconds_to_hms(timestamp_seconds)
         self.historico_leituras["Timestamp"].append(timestamp_hms)
 
@@ -72,15 +105,28 @@ class ModbusClientHandler(QObject):
 
     def read_registers(self):
         try:
-            lista = self.client.read_holding_registers(0, 7)
-            if lista:
-                # Adquirir os valores dos registradores
-                self.parametros = self.print_holding_registers(lista)
-                # Dividir o valor de todos os parametros por 10
-                for i in range(len(self.parametros)):
-                    self.parametros[i][0] /= 10
-                # Armazenar os valores dos registradores
-                self.armazenar_leitura(self.parametros)
+            # Lista de endereços dos registradores a serem lidos
+            addresses = [224, 226, 228, 230, 232, 276, 278, 280, 282, 284, 286, 384, 386, 388, 390, 392]
+            
+            # Lista para armazenar os valores lidos
+            lista = []
+            
+            for address in addresses:
+                value = self.client.read_holding_registers(address, 1)
+                if value:
+                    lista.append(value[0])
+                else:
+                    lista.append(0)  # Adiciona 0 se não conseguir ler o valor
+            
+            # Adquirir os valores dos registradores
+            self.parametros = self.print_holding_registers(lista)
+            
+            # Dividir o valor de todos os parametros por 10
+            for i in range(len(self.parametros)):
+                self.parametros[i][0] /= 10
+            
+            # Armazenar os valores dos registradores
+            self.armazenar_leitura(self.parametros)
         except Exception as e:
             print(f"Erro ao tentar ler os registradores: {e}")
 
