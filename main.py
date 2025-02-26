@@ -1,4 +1,4 @@
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QGridLayout, QLabel, QPushButton, QVBoxLayout, QLineEdit
+from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QGridLayout, QLabel, QPushButton, QVBoxLayout, QLineEdit, QScrollArea
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtCore import Qt, QTimer, QProcess, QThread
 from PyQt6.QtGui import QPalette
@@ -24,7 +24,10 @@ class MainWindow(QMainWindow):
 
         # Configuração da janela principal
         self.setWindowTitle("Interface Datalogger")
-        self.setGeometry(100, 100, 1440, 810)
+        screen_geometry = QApplication.primaryScreen().geometry()
+        width = int(screen_geometry.width() * 0.87)
+        height = int(screen_geometry.height() * 0.87)
+        self.setGeometry(int(screen_geometry.width() * 0.1), int(screen_geometry.height() * 0.1), width, height)
         
         # Widget principal e layout
         central_widget = QWidget()
@@ -35,23 +38,23 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
         
         # Retângulo azul superior esquerdo com título
-        admin_label = QLabel("Admin")
-        admin_label.setFixedSize(160, 90)
+        admin_label = QLabel("Interface")
+        admin_label.setFixedSize(int(width * 0.11), int(height * 0.11))
         admin_label.setStyleSheet("background-color: #4a90e2; color: #ffffff; border-radius: 10px; padding: 10px;")
         font = QFont()
-        font.setPixelSize(40)
+        font.setPixelSize(32)
         admin_label.setFont(font)
         admin_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(admin_label, 0, 0, 1, 1)
         
         # Barra superior com botão "toggle"
         header_widget = QWidget()
-        header_widget.setFixedSize(1220, 90)
+        header_widget.setFixedSize(int(width * 1), int(height * 0.11))
         header_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
         
         # Botão toggle para alternar entre dados e gráficos
         self.config_button = QPushButton("Exibir Gráfico")
-        self.config_button.setFixedSize(150, 40)
+        self.config_button.setFixedSize(int(width * 0.1), int(height * 0.05))
         self.config_button.setStyleSheet("""
             QPushButton {
                 background-color: #ffffff;
@@ -68,7 +71,7 @@ class MainWindow(QMainWindow):
 
         # Botão para fechar a aplicação
         self.close_button = QPushButton("Fechar Aplicação")
-        self.close_button.setFixedSize(150, 40)
+        self.close_button.setFixedSize(int(width * 0.1), int(height * 0.05))
         self.close_button.setStyleSheet("""
             QPushButton {
                 background-color: #ffffff;
@@ -88,18 +91,18 @@ class MainWindow(QMainWindow):
         header_layout.setContentsMargins(0, 0, 20, 0)
 
         # Adiciona espaços vazios nas primeiras colunas
-        for i in range(5):
+        for i in range(10):
             header_layout.addWidget(QWidget(), 0, i)
 
         # Adiciona os botões nas últimas duas colunas
-        header_layout.addWidget(self.config_button, 0, 5, alignment=Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(self.close_button, 0, 6, alignment=Qt.AlignmentFlag.AlignRight)
+        header_layout.addWidget(self.config_button, 0, 11, alignment=Qt.AlignmentFlag.AlignCenter)
+        header_layout.addWidget(self.close_button, 0, 12, alignment=Qt.AlignmentFlag.AlignRight)
 
         layout.addWidget(header_widget, 0, 1, 1, 1)
         
         # Barra lateral esquerda com 5 linhas
         sidebar_widget = QWidget()
-        sidebar_widget.setFixedSize(160, 700)
+        sidebar_widget.setFixedSize(int(width * 0.11), int(height * 0.9))
         sidebar_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
         sidebar_layout = QVBoxLayout()
         self.line_edits = []
@@ -109,14 +112,14 @@ class MainWindow(QMainWindow):
         # Adicionando titulo na barra lateral
         label = QLabel(f"Inserção manual")
         label.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 18px;")
-        label.setFixedSize(135, 50)
+        label.setFixedSize(int(width * 0.09), int(height * 0.06))
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sidebar_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignCenter)
 
         # Definindo estilos e tamanhos padronizados
         label_style = "background-color: #ffffff; color: #4a90e2; font-size: 18px;"
         line_edit_style = "background-color: #ffffff; color: #4a90e2; font-size: 16px;"
-        fixed_size = (120, 30)
+        fixed_size = (int(width * 0.08), int(height * 0.04))
         max_length = 6  # Definindo o limite de caracteres
 
         # Ajustando o espaçamento do layout
@@ -147,26 +150,28 @@ class MainWindow(QMainWindow):
         sidebar_widget.setLayout(sidebar_layout)
         layout.addWidget(sidebar_widget, 1, 0, 1, 1)
         
-        # Layout da grade para os labels e gráficos
-        self.grid_widget = QWidget()
-        self.grid_layout = QGridLayout()
-        self.grid_layout.setSpacing(20)
-        
+        # Área de rolagem para os gráficos e labels
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_content = QWidget()
+        scroll_layout = QGridLayout(scroll_content)
+        scroll_layout.setSpacing(20)
+
         # Listas para armazenar labels e gráficos
         self.labels = []
         self.graphs = []
         
         # Preenchendo a grade com widgets de labels e gráficos
-        for row in range(3):
-            for col in range(2):
+        for row in range(6):
+            for col in range(3):
                 # Widget para gráfico com canvas do matplotlib
                 graph_canvas = FigureCanvas(plt.Figure(figsize=(5, 4)))
-                graph_canvas.setFixedSize(500, 200)
+                graph_canvas.setFixedSize(int(width * 0.3), int(height * 0.25))
                 self.graphs.append(graph_canvas)
                 
                 # Widget com label para exibir texto
                 rect_widget = QWidget()
-                rect_widget.setFixedSize(500, 120)
+                rect_widget.setFixedSize(int(width * 0.28), int(height * 0.1))
                 rect_widget.setStyleSheet("background-color: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 10px;")
                 
                 label = QLabel("Texto Inicial")
@@ -184,12 +189,13 @@ class MainWindow(QMainWindow):
                 rect_layout.addWidget(label, 0, 0)
                 
                 # Adicionar widgets ao grid
-                self.grid_layout.addWidget(rect_widget, row, col)
-                self.grid_layout.addWidget(graph_canvas, row, col)
+                scroll_layout.addWidget(rect_widget, row, col)
+                scroll_layout.addWidget(graph_canvas, row, col)
                 graph_canvas.hide()  # Ocultar gráficos inicialmente
                 
-        self.grid_widget.setLayout(self.grid_layout)
-        layout.addWidget(self.grid_widget, 1, 1, 1, 1)
+        scroll_content.setLayout(scroll_layout)
+        scroll_area.setWidget(scroll_content)
+        layout.addWidget(scroll_area, 1, 1, 1, 1)
         
         # Configuração do timer para atualizar os parametros
         self.timer = QTimer(self)

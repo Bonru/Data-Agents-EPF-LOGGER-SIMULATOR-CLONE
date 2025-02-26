@@ -9,31 +9,31 @@ class ModbusClientHandler(QObject):
         super().__init__()
         self.client = ModbusClient(host, port)
         self.historico_leituras = {
-            "Vel. vento": deque(maxlen=50),
-            "Temperatura 1": deque(maxlen=50),
-            "Umidade Higrometro": deque(maxlen=50),
-            "Temperatura 2": deque(maxlen=50),
-            "Temp Higrometro": deque(maxlen=50),
-            "Ref Cel 40": deque(maxlen=50),
-            "Teste Cel 40": deque(maxlen=50),
-            "Ref Cel 30": deque(maxlen=50),
-            "Ref Cel 10": deque(maxlen=50),
-            "Ref 40 Temp": deque(maxlen=50),
-            "Ref 30 Temp": deque(maxlen=50),
-            "Ref 10 Temp": deque(maxlen=50),
-            "POA RI 2": deque(maxlen=50),
-            "POA 2": deque(maxlen=50),
-            "POA RI 1": deque(maxlen=50),
-            "POA 1": deque(maxlen=50),
-            "GHI": deque(maxlen=50),
-            "Timestamp": deque(maxlen=50)
+            "Vel. vento": deque(maxlen=50),         #1
+            "Temperatura 1": deque(maxlen=50),      #2
+            "Umidade H.": deque(maxlen=50),         #3
+            "Temperatura 2": deque(maxlen=50),      #4
+            "Temp H.": deque(maxlen=50),            #5
+            "Ref Cel 40": deque(maxlen=50),         #6
+            "Teste Cel 40": deque(maxlen=50),       #7
+            "Ref Cel 30": deque(maxlen=50),         #8
+            "Ref Cel 10": deque(maxlen=50),         #9
+            "Ref 40 Temp": deque(maxlen=50),        #10
+            "Ref 30 Temp": deque(maxlen=50),        #11
+            "Ref 10 Temp": deque(maxlen=50),        #12
+            "POA RI 2": deque(maxlen=50),           #13
+            "POA 2": deque(maxlen=50),              #14
+            "POA RI 1": deque(maxlen=50),           #15
+            "POA 1": deque(maxlen=50),              #16
+            "GHI": deque(maxlen=50),                #17
+            "Timestamp": deque(maxlen=50)           #18
         }
         self.parametros = [
             [0, "Vel. vento", "m/s"],
             [0, "Temperatura 1", "°C"],
-            [0, "Umidade Higrometro", "%"],
+            [0, "Umidade H.", "%"],
             [0, "Temperatura 2", "°C"],
-            [0, "Temp Higrometro", "°C"],
+            [0, "Temp H.", "°C"],
             [0, "Ref Cel 40", "W/m²"],
             [0, "Teste Cel 40", "°C"],
             [0, "Ref Cel 30", "W/m²"],
@@ -66,26 +66,26 @@ class ModbusClientHandler(QObject):
         """Armazena cada nova leitura no histórico, mantendo apenas as últimas 50 leituras."""
         
         # Adicionar as novas leituras aos deques
-        self.historico_leituras["Vel. vento"].append(parametros[0][0])
-        self.historico_leituras["Temperatura 1"].append(parametros[1][0])
-        self.historico_leituras["Umidade Higrometro"].append(parametros[2][0])
-        self.historico_leituras["Temperatura 2"].append(parametros[3][0])
-        self.historico_leituras["Temp Higrometro"].append(parametros[4][0])
-        self.historico_leituras["Ref Cel 40"].append(parametros[5][0])
-        self.historico_leituras["Teste Cel 40"].append(parametros[6][0])
-        self.historico_leituras["Ref Cel 30"].append(parametros[7][0])
-        self.historico_leituras["Ref Cel 10"].append(parametros[8][0])
-        self.historico_leituras["Ref 40 Temp"].append(parametros[9][0])
-        self.historico_leituras["Ref 30 Temp"].append(parametros[10][0])
-        self.historico_leituras["Ref 10 Temp"].append(parametros[11][0])
-        self.historico_leituras["POA RI 2"].append(parametros[12][0])
-        self.historico_leituras["POA 2"].append(parametros[13][0])
-        self.historico_leituras["POA RI 1"].append(parametros[14][0])
-        self.historico_leituras["POA 1"].append(parametros[15][0])
-        self.historico_leituras["GHI"].append(parametros[16][0])
+        self.historico_leituras["Vel. vento"].append(parametros[0][0])   # Register 224
+        self.historico_leituras["Temperatura 1"].append(parametros[1][0])# Register 226
+        self.historico_leituras["Umidade H."].append(parametros[2][0])      # Register 228
+        self.historico_leituras["Temperatura 2"].append(parametros[3][0]) # Register 230
+        self.historico_leituras["Temp H."].append(parametros[4][0]) # Register 232
+        self.historico_leituras["Ref Cel 40"].append(parametros[5][0]) # Register 276
+        self.historico_leituras["Teste Cel 40"].append(parametros[6][0]) # Register 501
+        self.historico_leituras["Ref Cel 30"].append(parametros[7][0]) # Register 280
+        self.historico_leituras["Ref Cel 10"].append(parametros[8][0]) # Register 284
+        self.historico_leituras["Ref 40 Temp"].append(parametros[9][0]) # Register 278
+        self.historico_leituras["Ref 30 Temp"].append(parametros[10][0]) # Register 282
+        self.historico_leituras["Ref 10 Temp"].append(parametros[11][0]) # Register 286
+        self.historico_leituras["POA RI 2"].append(parametros[12][0]) # Register 392
+        self.historico_leituras["POA 2"].append(parametros[13][0])    # Register 390
+        self.historico_leituras["POA RI 1"].append(parametros[14][0]) # Register 388
+        self.historico_leituras["POA 1"].append(parametros[15][0])    # Register 386
+        self.historico_leituras["GHI"].append(parametros[16][0])      # Register 384
         
         # Converter Timestamp de segundos para hora:minuto:segundo
-        timestamp_seconds = parametros[17][0]
+        timestamp_seconds = parametros[17][0] # Register 500
         timestamp_hms = self.convert_seconds_to_hms(timestamp_seconds)
         self.historico_leituras["Timestamp"].append(timestamp_hms)
 
@@ -106,7 +106,7 @@ class ModbusClientHandler(QObject):
     def read_registers(self):
         try:
             # Lista de endereços dos registradores a serem lidos
-            addresses = [224, 226, 228, 230, 232, 276, 278, 280, 282, 284, 286, 384, 386, 388, 390, 392]
+            addresses = [224, 226, 228, 230, 232, 276, 501, 280, 284, 278, 282, 286, 392, 390, 388, 386, 384, 500]
             
             # Lista para armazenar os valores lidos
             lista = []
@@ -116,7 +116,8 @@ class ModbusClientHandler(QObject):
                 if value:
                     lista.append(value[0])
                 else:
-                    lista.append(0)  # Adiciona 0 se não conseguir ler o valor
+                    lista.append(0) # Adiciona 0 se não conseguir ler o valor
+                    print("Falha ao ler o registrador", address)  
             
             # Adquirir os valores dos registradores
             self.parametros = self.print_holding_registers(lista)

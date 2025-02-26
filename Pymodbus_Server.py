@@ -63,14 +63,14 @@ class MyDataBank(DataBank):
         ghi = abs(self.treat_data(parametros['ghi'])) # i = 16
         timestamp = self.treat_timestamp(parametros['TIME']) # i = 17
 
+        self.leitura += 1  # atualiza numero da leitura
         print(v_vento, temp_1, umidade_higromet, temp_2, temp_higrometro, ref_cel_40, testecel40, ref_cel_30, ref_cel_10, ref_40_temp, ref_30_temp, ref_10_temp, poa_ri_2, poa_2, poa_ri_1, poa_1, ghi, timestamp)
-        self.leitura += 1  #atualiza numero da leitura
         
         return [v_vento, temp_1, umidade_higromet, temp_2, temp_higrometro, ref_cel_40, testecel40, ref_cel_30, ref_cel_10, ref_40_temp, ref_30_temp, ref_10_temp, poa_ri_2, poa_2, poa_ri_1, poa_1, ghi, timestamp]
 
     def update_values(self):
         self.lista = self.new_values()
-        
+        print("Tamanho da lista:", len(self.lista))
         # Mapeamento dos parâmetros para os registradores correspondentes
         self._h_regs[224] = self.lista[0]  # vel. vento
         self._h_regs[226] = self.lista[1]  # temperatura do ar
@@ -78,16 +78,18 @@ class MyDataBank(DataBank):
         self._h_regs[230] = self.lista[3]  # Temperatura do modulo 1
         self._h_regs[232] = self.lista[4]  # Temperatura do modulo 2
         self._h_regs[276] = self.lista[5]  # radiação celula 40m
-        self._h_regs[278] = self.lista[6]  # Temperatura celula 40m
+        self._h_regs[501] = self.lista[6]  # Teste celula 40m
+        self._h_regs[278] = self.lista[9]  # Temperatura celula 40m
         self._h_regs[280] = self.lista[7]  # radiação celula 30m
-        self._h_regs[282] = self.lista[8]  # Temperatura celula 30m
-        self._h_regs[284] = self.lista[9]  # radiação celula 10m
-        self._h_regs[286] = self.lista[10]  # Temperatura celula 10m
-        self._h_regs[384] = self.lista[11]  # Radiação solar GHI
-        self._h_regs[386] = self.lista[12]  # Radiação solar POA 1
-        self._h_regs[388] = self.lista[13]  # Radiação solar POA RI 1
-        self._h_regs[390] = self.lista[14]  # Radiação solar POA 2
-        self._h_regs[392] = self.lista[15]  # Radiação solar POA RI 2
+        self._h_regs[282] = self.lista[10]  # Temperatura celula 30m
+        self._h_regs[284] = self.lista[8]  # radiação celula 10m
+        self._h_regs[286] = self.lista[11]  # Temperatura celula 10m
+        self._h_regs[384] = self.lista[16]  # Radiação solar GHI
+        self._h_regs[386] = self.lista[15]  # Radiação solar POA 1
+        self._h_regs[388] = self.lista[14]  # Radiação solar POA RI 1
+        self._h_regs[390] = self.lista[13]  # Radiação solar POA 2
+        self._h_regs[392] = self.lista[12]  # Radiação solar POA RI 2
+        self._h_regs[500] = self.lista[17]  # Timestamp
         
         return self.lista
 
