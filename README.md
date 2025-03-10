@@ -9,6 +9,5 @@
 + (+) Servidor disponibiliza todos os dados da planilha. Mapeamento semelhante ao datalogger da FEEC
 + (+) Interface gráfica corrigida para comportar os novos parametros
 
-## 26/02/2025
-- (-) Base de dados SQLite
-- (-) Corrigir função Sobrescrever dados no servidor
+## 10/03/2025
+- (+) Corrigir função Sobrescrever dados no servidor

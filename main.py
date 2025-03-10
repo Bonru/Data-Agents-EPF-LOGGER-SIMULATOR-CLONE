@@ -119,14 +119,21 @@ class MainWindow(QMainWindow):
         # Definindo estilos e tamanhos padronizados
         label_style = "background-color: #ffffff; color: #4a90e2; font-size: 18px;"
         line_edit_style = "background-color: #ffffff; color: #4a90e2; font-size: 16px;"
-        fixed_size = (int(width * 0.08), int(height * 0.04))
+        fixed_size = (int(width * 0.08), int(height * 0.03))
         max_length = 6  # Definindo o limite de caracteres
 
         # Ajustando o espaçamento do layout
-        sidebar_layout.setSpacing(5)
+        sidebar_layout.setSpacing(9)
         sidebar_layout.addWidget(QWidget(), alignment=Qt.AlignmentFlag.AlignCenter)
 
-        for i in range(1, 7):
+        # Adicionando um QScrollArea para a barra lateral
+        scroll_area_sidebar = QScrollArea()
+        scroll_area_sidebar.setWidgetResizable(True)
+        scroll_area_sidebar.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
+        scroll_content_sidebar = QWidget()
+        scroll_content_sidebar.setLayout(sidebar_layout)
+
+        for i in range(1, 18):
             lista = self.client.getdata()
             text = f"{lista[i - 1][1]}"
 
@@ -147,8 +154,8 @@ class MainWindow(QMainWindow):
             self.line_edits.append(line_edit)  # Adiciona o LineEdit à lista
             sidebar_layout.addWidget(QWidget(), alignment=Qt.AlignmentFlag.AlignCenter) #espaçamento
 
-        sidebar_widget.setLayout(sidebar_layout)
-        layout.addWidget(sidebar_widget, 1, 0, 1, 1)
+        scroll_area_sidebar.setWidget(scroll_content_sidebar)
+        layout.addWidget(scroll_area_sidebar, 1, 0, 1, 1)
         
         # Área de rolagem para os gráficos e labels
         scroll_area = QScrollArea()
@@ -263,11 +270,22 @@ class MainWindow(QMainWindow):
         # Gerar o gráfico
         dados = self.client.historico_leituras
         if data_type in dados:
-            x = list(range(len(dados[data_type])))
+            x = dados["Timestamp"]
             y = dados[data_type]
             ax.plot(x, y, marker='o')
             ax.set_title(f"Gráfico de {data_type}")
             ax.set_xlabel("Tempo")
+
+            # Definir ticks do eixo x para mostrar apenas 5 valores igualmente espaçados
+            num_ticks = 4
+            if len(x) > num_ticks:
+                tick_positions = [x[i] for i in range(0, len(x), len(x) // num_ticks)]
+                ax.set_xticks(tick_positions)
+                ax.set_xticklabels([x[i] for i in range(0, len(x), len(x) // num_ticks)])
+            else:
+                ax.set_xticks(x)
+                ax.set_xticklabels(x)
+            
         else:
             self.error_label.setText(f"Dados de {data_type} não encontrados.")
 
@@ -279,12 +297,14 @@ class MainWindow(QMainWindow):
             lista = self.client.getdata()
             aux = False
             # Atualiza os valores em self.parametros com os valores dos LineEdit
+             
+            addresses = [224, 226, 228, 230, 232, 276, 501, 280, 284, 278, 282, 286, 392, 390, 388, 386, 384, 500] # Lista de endereços dos registradores que podem ser sobrescritos
             for i, line_edit in enumerate(self.line_edits):
                 if i < len(lista):
                     if line_edit.text() != "":
                         new_value = (int(line_edit.text()) * 10)
                         print("i", i, "New_value", new_value)
-                        self.client.write_register(i, new_value)
+                        self.client.write_register(addresses[i], new_value)
 
         except ValueError:
             self.error_label.setText("Erro ao converter valor para float.")

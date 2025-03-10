@@ -8,25 +8,26 @@ class ModbusClientHandler(QObject):
     def __init__(self, host="localhost", port=8080):
         super().__init__()
         self.client = ModbusClient(host, port)
+        MAXLEN = 30
         self.historico_leituras = {
-            "Vel. vento": deque(maxlen=50),         #1
-            "Temperatura 1": deque(maxlen=50),      #2
-            "Umidade H.": deque(maxlen=50),         #3
-            "Temperatura 2": deque(maxlen=50),      #4
-            "Temp H.": deque(maxlen=50),            #5
-            "Ref Cel 40": deque(maxlen=50),         #6
-            "Teste Cel 40": deque(maxlen=50),       #7
-            "Ref Cel 30": deque(maxlen=50),         #8
-            "Ref Cel 10": deque(maxlen=50),         #9
-            "Ref 40 Temp": deque(maxlen=50),        #10
-            "Ref 30 Temp": deque(maxlen=50),        #11
-            "Ref 10 Temp": deque(maxlen=50),        #12
-            "POA RI 2": deque(maxlen=50),           #13
-            "POA 2": deque(maxlen=50),              #14
-            "POA RI 1": deque(maxlen=50),           #15
-            "POA 1": deque(maxlen=50),              #16
-            "GHI": deque(maxlen=50),                #17
-            "Timestamp": deque(maxlen=50)           #18
+            "Vel. vento": deque(maxlen = MAXLEN),         #1
+            "Temperatura 1": deque(maxlen = MAXLEN),      #2
+            "Umidade H.": deque(maxlen = MAXLEN),         #3
+            "Temperatura 2": deque(maxlen = MAXLEN),      #4
+            "Temp H.": deque(maxlen = MAXLEN),            #5
+            "Ref Cel 40": deque(maxlen = MAXLEN),         #6
+            "Teste Cel 40": deque(maxlen = MAXLEN),       #7
+            "Ref Cel 30": deque(maxlen = MAXLEN),         #8
+            "Ref Cel 10": deque(maxlen = MAXLEN),         #9
+            "Ref 40 Temp": deque(maxlen = MAXLEN),        #10
+            "Ref 30 Temp": deque(maxlen = MAXLEN),        #11
+            "Ref 10 Temp": deque(maxlen = MAXLEN),        #12
+            "POA RI 2": deque(maxlen = MAXLEN),           #13
+            "POA 2": deque(maxlen = MAXLEN),              #14
+            "POA RI 1": deque(maxlen = MAXLEN),           #15
+            "POA 1": deque(maxlen = MAXLEN),              #16
+            "GHI": deque(maxlen = MAXLEN),                #17
+            "Timestamp": deque(maxlen = MAXLEN)           #18
         }
         self.parametros = [
             [0, "Vel. vento", "m/s"],
