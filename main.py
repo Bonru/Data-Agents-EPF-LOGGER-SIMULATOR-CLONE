@@ -14,7 +14,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         # Intervalo de atualização de dados
-        self.intervalo = 1500
+        self.intervalo = 20000
         # Iniciar o script pymodbus_cliente.py
         self.client = ModbusClientHandler()
         self.thread = QThread()
@@ -209,7 +209,6 @@ class MainWindow(QMainWindow):
         self.timer.timeout.connect(self.update_numbers)
         self.timer.start(self.intervalo)
 
-        
         # Fundo claro
         self.setAutoFillBackground(True)
         palette = self.palette()

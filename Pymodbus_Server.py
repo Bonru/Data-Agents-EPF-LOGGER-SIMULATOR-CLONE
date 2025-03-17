@@ -96,7 +96,7 @@ class MyDataBank(DataBank):
     def update_values_periodically(self):
         while True:
             self.update_values()
-            time.sleep(1.5)
+            time.sleep(20)
 
     # Função para retornar os valores dos registradores
     def get_holding_registers(self, address, number=1, srv_info=None):

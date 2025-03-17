@@ -11,3 +11,8 @@
 
 ## 10/03/2025
 - (+) Corrigir função Sobrescrever dados no servidor
+- (+) Corrigir exibição de timestamp no gráfico
+
+## 17/03/2025
+- (+) Adição de requests HTTP
+- (+) Primeiros testes de interações com o sistema do Flávio

@@ -3,6 +3,9 @@ from time import sleep
 import json
 from collections import deque
 from PyQt6.QtCore import QObject
+import measure
+import subprocess
+from concurrent.futures import ThreadPoolExecutor
 
 class ModbusClientHandler(QObject):
     def __init__(self, host="localhost", port=8080):
@@ -49,6 +52,7 @@ class ModbusClientHandler(QObject):
             [0, "GHI", "W/m²"],
             [0, "Timestamp", "s"]
         ]
+        self.executor = ThreadPoolExecutor(max_workers=115)  # Adjust the number of workers as needed
 
     def print_holding_registers(self, lista):
         """Converte e exibe os valores dos registradores lidos."""      
@@ -116,6 +120,7 @@ class ModbusClientHandler(QObject):
                 value = self.client.read_holding_registers(address, 1)
                 if value:
                     lista.append(value[0])
+                    self.executor.submit(self.post_measure, measure.fields[addresses.index(address)]['name'], value[0]/10)
                 else:
                     lista.append(0) # Adiciona 0 se não conseguir ler o valor
                     print("Falha ao ler o registrador", address)  
@@ -131,6 +136,19 @@ class ModbusClientHandler(QObject):
             self.armazenar_leitura(self.parametros)
         except Exception as e:
             print(f"Erro ao tentar ler os registradores: {e}")
+
+    def post_measure(self, field, value):
+        try:
+            result = subprocess.run(
+                ['python', 'solar-platform-monitor-simulator\measure.py', field, str(value)],
+                capture_output=True,
+                text=True
+            )
+            print(result.stdout)
+            if result.returncode != 0:
+                print(f"Error: {result.stderr}")
+        except Exception as e:
+            print(f"Error executing measure.py: {e}")
 
     def getdata(self):
         return self.parametros
@@ -150,5 +168,6 @@ class ModbusClientHandler(QObject):
             self.client.close()
             print("Cliente Fechado")
     
+
 ModbusClientHandler().start()
 
