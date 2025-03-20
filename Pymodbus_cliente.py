@@ -52,16 +52,17 @@ class ModbusClientHandler(QObject):
             [0, "GHI", "W/m²"],
             [0, "Timestamp", "s"]
         ]
-        self.executor = ThreadPoolExecutor(max_workers=115)  # Adjust the number of workers as needed
+        self.executor = ThreadPoolExecutor(max_workers=18)  # Adjust the number of workers as needed
 
     def print_holding_registers(self, lista):
-        """Converte e exibe os valores dos registradores lidos."""      
+        """Converte e exibe os valores dos registradores lidos."""   
+        """
         for k in range(len(lista)):
-            #print(f"{self.parametros[k][1]}: {lista[k]:.1f} {self.parametros[k][2]}")
+            print(f"{self.parametros[k][1]}: {lista[k]:.1f} {self.parametros[k][2]}")
             pass
         print(self.parametros)
         print()
-            
+        """
         # Atualiza os valores para retornar na estrutura necessária para JSON
         for j in range(len(lista)):
             self.parametros[j][0] = lista[j]
@@ -142,13 +143,16 @@ class ModbusClientHandler(QObject):
             result = subprocess.run(
                 ['python', 'solar-platform-monitor-simulator\measure.py', field, str(value)],
                 capture_output=True,
-                text=True
+                text=True,
+                timeout=6  # Timeout in seconds
             )
             print(result.stdout)
             if result.returncode != 0:
                 print(f"Error: {result.stderr}")
+        except subprocess.TimeoutExpired:
+            print(f"Timeout para o campo {field}, valor: {value}")
         except Exception as e:
-            print(f"Error executing measure.py: {e}")
+            print(f"Erro no método post: {e}")
 
     def getdata(self):
         return self.parametros
