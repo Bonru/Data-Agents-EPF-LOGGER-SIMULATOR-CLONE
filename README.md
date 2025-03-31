@@ -16,3 +16,7 @@
 ## 17/03/2025
 - (+) Adição de requests HTTP
 - (+) Primeiros testes de interações com o sistema do Flávio
+
+## 31/03/2025
+- (+) Melhorias nos requests HTTP (Timeout)
+- (+) Testes de uso de SQLite
