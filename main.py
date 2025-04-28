@@ -14,7 +14,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         
         # Intervalo de atualização de dados
-        self.intervalo = 20000
+        self.intervalo = 2000
         # Iniciar o script pymodbus_cliente.py
         self.client = ModbusClientHandler()
         self.thread = QThread()
@@ -133,7 +133,7 @@ class MainWindow(QMainWindow):
         scroll_content_sidebar = QWidget()
         scroll_content_sidebar.setLayout(sidebar_layout)
 
-        for i in range(1, 18):
+        for i in range(1, 20):
             lista = self.client.getdata()
             text = f"{lista[i - 1][1]}"
 
@@ -169,7 +169,7 @@ class MainWindow(QMainWindow):
         self.graphs = []
         
         # Preenchendo a grade com widgets de labels e gráficos
-        for row in range(6):
+        for row in range(7):
             for col in range(3):
                 # Widget para gráfico com canvas do matplotlib
                 graph_canvas = FigureCanvas(plt.Figure(figsize=(5, 4)))
@@ -297,7 +297,7 @@ class MainWindow(QMainWindow):
             aux = False
             # Atualiza os valores em self.parametros com os valores dos LineEdit
              
-            addresses = [224, 226, 228, 230, 232, 276, 501, 280, 284, 278, 282, 286, 392, 390, 388, 386, 384, 500] # Lista de endereços dos registradores que podem ser sobrescritos
+            addresses = [224, 226, 228, 230, 232, 276, 501, 280, 284, 278, 282, 286, 392, 390, 388, 386, 384, 500, 5054] # Lista de endereços dos registradores que podem ser sobrescritos
             for i, line_edit in enumerate(self.line_edits):
                 if i < len(lista):
                     if line_edit.text() != "":

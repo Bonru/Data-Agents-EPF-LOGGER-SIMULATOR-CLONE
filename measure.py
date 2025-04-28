@@ -103,6 +103,10 @@ fields = [
     {
         "name": "irradiacao_poa_ri2_acumulada",
         "type": "float"
+    },
+    {
+        "name": "fault_code",
+        "type": "int"
     }
 ]
 

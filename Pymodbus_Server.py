@@ -13,6 +13,7 @@ df = pd.read_excel('Datalogger_28_11_2024.xlsx')
 class MyDataBank(DataBank):
     def __init__(self):
         super().__init__()
+        self.timer = 2
         self.leitura = 0
         self.lista = []
         self.start(0)
@@ -44,59 +45,65 @@ class MyDataBank(DataBank):
     def new_values(self):
         parametros = self.sheet_values(self.leitura, df)
 
-        v_vento = self.treat_data(parametros['v_vento']) # i = 0
-        temp_1 = self.treat_data(parametros['temp_1']) # i = 1
-        umidade_higromet = self.treat_data(parametros['umidade_higromet']) # i = 2
-        temp_2 = self.treat_data(parametros['temp_2']) # i = 3
-        temp_higrometro = self.treat_data(parametros['temp_higrometro']) # i = 4
-        ref_cel_40 = self.treat_data(parametros['ref_cel_40']) # i = 5
-        testecel40 = self.treat_data(parametros['testecel40']) # i = 6
-        ref_cel_30 = self.treat_data(parametros['ref_cel_30']) # i = 7
-        ref_cel_10 = self.treat_data(parametros['ref_cel_10']) # i = 8
-        ref_40_temp = self.treat_data(parametros['ref_40_temp']) # i = 9
-        ref_30_temp = self.treat_data(parametros['ref_30_temp']) # i = 10
-        ref_10_temp = self.treat_data(parametros['ref_10_temp']) # i = 11
-        poa_ri_2 = self.treat_data(parametros['poa_ri_2']) # i = 12
-        poa_2 = self.treat_data(parametros['poa_2']) # i = 13
-        poa_ri_1 = self.treat_data(parametros['poa_ri_1']) # i = 14
-        poa_1 = self.treat_data(parametros['poa_1']) # i = 15
-        ghi = abs(self.treat_data(parametros['ghi'])) # i = 16
-        timestamp = self.treat_timestamp(parametros['TIME']) # i = 17
+        #Leituras
+        self.v_vento = self.treat_data(parametros['v_vento']) # i = 0
+        self.temp_1 = self.treat_data(parametros['temp_1']) # i = 1
+        self.umidade_higromet = self.treat_data(parametros['umidade_higromet']) # i = 2
+        self.temp_2 = self.treat_data(parametros['temp_2']) # i = 3
+        self.temp_higrometro = self.treat_data(parametros['temp_higrometro']) # i = 4
+        self.ref_cel_40 = self.treat_data(parametros['ref_cel_40']) # i = 5
+        self.testecel40 = self.treat_data(parametros['testecel40']) # i = 6
+        self.ref_cel_30 = self.treat_data(parametros['ref_cel_30']) # i = 7
+        self.ref_cel_10 = self.treat_data(parametros['ref_cel_10']) # i = 8
+        self.ref_40_temp = self.treat_data(parametros['ref_40_temp']) # i = 9
+        self.ref_30_temp = self.treat_data(parametros['ref_30_temp']) # i = 10
+        self.ref_10_temp = self.treat_data(parametros['ref_10_temp']) # i = 11
+        self.poa_ri_2 = self.treat_data(parametros['poa_ri_2']) # i = 12
+        self.poa_2 = self.treat_data(parametros['poa_2']) # i = 13
+        self.poa_ri_1 = self.treat_data(parametros['poa_ri_1']) # i = 14
+        self.poa_1 = self.treat_data(parametros['poa_1']) # i = 15
+        self.ghi = abs(self.treat_data(parametros['ghi'])) # i = 16
+        self.timestamp = self.treat_timestamp(parametros['TIME']) # i = 17
+
+        #Device Fault Code
+        self.Fault_c1 = 0
 
         self.leitura += 1  # atualiza numero da leitura
-        print(v_vento, temp_1, umidade_higromet, temp_2, temp_higrometro, ref_cel_40, testecel40, ref_cel_30, ref_cel_10, ref_40_temp, ref_30_temp, ref_10_temp, poa_ri_2, poa_2, poa_ri_1, poa_1, ghi, timestamp)
         
-        return [v_vento, temp_1, umidade_higromet, temp_2, temp_higrometro, ref_cel_40, testecel40, ref_cel_30, ref_cel_10, ref_40_temp, ref_30_temp, ref_10_temp, poa_ri_2, poa_2, poa_ri_1, poa_1, ghi, timestamp]
+        return [self.v_vento, self.temp_1, self.umidade_higromet, self.temp_2, self.temp_higrometro, self.ref_cel_40, self.testecel40, self.ref_cel_30, self.ref_cel_10, self.ref_40_temp, self.ref_30_temp, self.ref_10_temp, self.poa_ri_2, self.poa_2, self.poa_ri_1, self.poa_1, self.ghi, self.timestamp, self.Fault_c1]
 
     def update_values(self):
         self.lista = self.new_values()
+        print(self.lista)
         print("Tamanho da lista:", len(self.lista))
         # Mapeamento dos parâmetros para os registradores correspondentes
-        self._h_regs[224] = self.lista[0]  # vel. vento
-        self._h_regs[226] = self.lista[1]  # temperatura do ar
-        self._h_regs[228] = self.lista[2]  # umidade do ar
-        self._h_regs[230] = self.lista[3]  # Temperatura do modulo 1
-        self._h_regs[232] = self.lista[4]  # Temperatura do modulo 2
-        self._h_regs[276] = self.lista[5]  # radiação celula 40m
-        self._h_regs[501] = self.lista[6]  # Teste celula 40m
-        self._h_regs[278] = self.lista[9]  # Temperatura celula 40m
-        self._h_regs[280] = self.lista[7]  # radiação celula 30m
-        self._h_regs[282] = self.lista[10]  # Temperatura celula 30m
-        self._h_regs[284] = self.lista[8]  # radiação celula 10m
-        self._h_regs[286] = self.lista[11]  # Temperatura celula 10m
-        self._h_regs[384] = self.lista[16]  # Radiação solar GHI
-        self._h_regs[386] = self.lista[15]  # Radiação solar POA 1
-        self._h_regs[388] = self.lista[14]  # Radiação solar POA RI 1
-        self._h_regs[390] = self.lista[13]  # Radiação solar POA 2
-        self._h_regs[392] = self.lista[12]  # Radiação solar POA RI 2
-        self._h_regs[500] = self.lista[17]  # Timestamp
+        self._h_regs[224] = self.v_vento  # vel. vento
+        self._h_regs[226] = self.temp_1  # temperatura do ar
+        self._h_regs[228] = self.umidade_higromet  # umidade do ar
+        self._h_regs[230] = self.temp_2  # Temperatura do modulo 1
+        self._h_regs[232] = self.temp_higrometro  # Temperatura do modulo 2
+        self._h_regs[276] = self.ref_cel_40  # radiação celula 40m
+        self._h_regs[501] = self.testecel40  # Teste celula 40m
+        self._h_regs[278] = self.ref_40_temp  # Temperatura celula 40m
+        self._h_regs[280] = self.ref_cel_30  # radiação celula 30m
+        self._h_regs[282] = self.ref_30_temp  # Temperatura celula 30m
+        self._h_regs[284] = self.ref_cel_10  # radiação celula 10m
+        self._h_regs[286] = self.ref_10_temp  # Temperatura celula 10m
+        self._h_regs[384] = self.ghi  # Radiação solar GHI
+        self._h_regs[386] = self.poa_1  # Radiação solar POA 1
+        self._h_regs[388] = self.poa_ri_1  # Radiação solar POA RI 1
+        self._h_regs[390] = self.poa_2  # Radiação solar POA 2
+        self._h_regs[392] = self.poa_ri_2  # Radiação solar POA RI 2
+        self._h_regs[500] = self.timestamp # Timestamp
+
+        self._h_regs[5054] = self.Fault_c1  # Argumento de falha
         
         return self.lista
 
     def update_values_periodically(self):
         while True:
             self.update_values()
-            time.sleep(20)
+            time.sleep(self.timer)
 
     # Função para retornar os valores dos registradores
     def get_holding_registers(self, address, number=1, srv_info=None):
