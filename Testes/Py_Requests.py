@@ -5,7 +5,7 @@ import pandas as pd
 
 """~~~~~~~~~~~~CONSTANTES DO PROGRAMA~~~~~~~~~~~~~~"""
 URL = "https://http-server-bf6a7-default-rtdb.firebaseio.com/.json"
-FILE = 'Testes\Data.xlsx'
+FILE = 'Testes/Datalogger_05_04_2024.xlsx'
 #Caso corrigir seja True os valores negativos serão corrigidos para 0 e as "," serão trocadas por "."
 CORRIGIR = True
 """~~~~~~~~~~~~CONSTANTES DO PROGRAMA~~~~~~~~~~~~~~"""

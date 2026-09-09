@@ -63,14 +63,18 @@ class MyDataBank(DataBank):
         self.poa_ri_1 = self.treat_data(parametros['poa_ri_1']) # i = 14
         self.poa_1 = self.treat_data(parametros['poa_1']) # i = 15
         self.ghi = abs(self.treat_data(parametros['ghi'])) # i = 16
-        self.timestamp = self.treat_timestamp(parametros['TIME']) # i = 17
+        self.irradiance = abs(self.treat_data(parametros['Irradiance'])) # i = 17
+        self.aparent_power = abs(self.treat_data(parametros['Apparent Power'])) # i = 18
+        self.timestamp = self.treat_timestamp(parametros['TIME']) # i = 19
 
         #Device Fault Code
         self.Fault_c1 = 0
 
         self.leitura += 1  # atualiza numero da leitura
         
-        return [self.v_vento, self.temp_1, self.umidade_higromet, self.temp_2, self.temp_higrometro, self.ref_cel_40, self.testecel40, self.ref_cel_30, self.ref_cel_10, self.ref_40_temp, self.ref_30_temp, self.ref_10_temp, self.poa_ri_2, self.poa_2, self.poa_ri_1, self.poa_1, self.ghi, self.timestamp, self.Fault_c1]
+        return [self.v_vento, self.temp_1, self.umidade_higromet, self.temp_2, self.temp_higrometro, self.ref_cel_40,
+                self.testecel40, self.ref_cel_30, self.ref_cel_10, self.ref_40_temp, self.ref_30_temp, self.ref_10_temp,
+                self.poa_ri_2, self.poa_2, self.poa_ri_1, self.poa_1, self.ghi, self.timestamp, self.Fault_c1, self.irradiance, self.aparent_power]
 
     def update_values(self):
         self.lista = self.new_values()
@@ -95,6 +99,8 @@ class MyDataBank(DataBank):
         self._h_regs[390] = self.poa_2  # Radiação solar POA 2
         self._h_regs[392] = self.poa_ri_2  # Radiação solar POA RI 2
         self._h_regs[500] = self.timestamp # Timestamp
+        self._h_regs[1] = self.irradiance # Irradiance
+        self._h_regs[2] = self.aparent_power # Apparent Power
 
         self._h_regs[5054] = self.Fault_c1  # Argumento de falha
         

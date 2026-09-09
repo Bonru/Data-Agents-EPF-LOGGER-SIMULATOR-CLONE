@@ -1,6 +1,7 @@
 from pyModbusTCP.client import ModbusClient
 from time import sleep
 import json
+import requests
 from collections import deque
 from PyQt6.QtCore import QObject
 import measure
@@ -14,9 +15,9 @@ class ModbusClientHandler(QObject):
         MAXLEN = 30
 
         #Uso opcional do Método HTTP
-        self.post_requests = False
+        self.post_requests = True
         # Lista de endereços dos registradores a serem lidos
-        self.addresses = [224, 226, 228, 230, 232, 276, 501, 280, 284, 278, 282, 286, 392, 390, 388, 386, 384, 500, 5054]
+        self.addresses = [224, 226, 228, 230, 232, 276, 501, 280, 284, 278, 282, 286, 392, 390, 388, 386, 384, 500, 5054, 1, 2]
 
         self.historico_leituras = {
             "Vel. vento": deque(maxlen = MAXLEN),         #1
@@ -37,7 +38,9 @@ class ModbusClientHandler(QObject):
             "POA 1": deque(maxlen = MAXLEN),              #16
             "GHI": deque(maxlen = MAXLEN),                #17
             "Timestamp": deque(maxlen = MAXLEN),          #18
-            "Fault_code": deque(maxlen = MAXLEN)          #19
+            "Fault_code": deque(maxlen = MAXLEN),         #19
+            "Irradiance": deque(maxlen = MAXLEN),         #20
+            "Apparent Power": deque(maxlen = MAXLEN)      #21
         }
         self.parametros = [
             [0, "Vel. vento", "m/s"],
@@ -58,7 +61,9 @@ class ModbusClientHandler(QObject):
             [0, "POA 1", "W/m²"],
             [0, "GHI", "W/m²"],
             [0, "Timestamp", "s"],
-            [0, "Fault_code", " "]
+            [0, "Fault_code", " "],
+            [0, "Irradiance", "W/m²"],
+            [0, "Apparent Power", "kVA"]
         ]
         self.executor = ThreadPoolExecutor(max_workers=18)  # Adjust the number of workers as needed
 
@@ -97,12 +102,15 @@ class ModbusClientHandler(QObject):
         self.historico_leituras["POA RI 1"].append(parametros[14][0])    # Register 388
         self.historico_leituras["POA 1"].append(parametros[15][0])       # Register 386
         self.historico_leituras["GHI"].append(parametros[16][0])         # Register 384
-        self.historico_leituras["Fault_code"].append(parametros[17][0])  # Register 5054
         
         # Converter Timestamp de segundos para hora:minuto:segundo
         timestamp_seconds = parametros[17][0] # Register 500
         timestamp_hms = self.convert_seconds_to_hms(timestamp_seconds)
         self.historico_leituras["Timestamp"].append(timestamp_hms)
+
+        self.historico_leituras["Fault_code"].append(parametros[18][0])  # Register 5054
+        self.historico_leituras["Irradiance"].append(parametros[19][0])  # Register 1
+        self.historico_leituras["Apparent Power"].append(parametros[20][0])  # Register 2
 
     def convert_seconds_to_hms(self, seconds):
         """Converte segundos para o formato hora:minuto:segundo."""
@@ -128,11 +136,9 @@ class ModbusClientHandler(QObject):
                 value = self.client.read_holding_registers(address, 1)
                 if value:
                     lista.append(value[0])
-                    if self.post_requests == True:
-                        self.executor.submit(self.post_measure, measure.fields[self.addresses.index(address)]['name'], value[0]/10)
                 else:
-                    lista.append(0) # Adiciona 0 se não conseguir ler o valor
-                    print("Falha ao ler o registrador", address)  
+                    lista.append(0)  # Adiciona 0 se não conseguir ler o valor
+                    print("Falha ao ler o registrador", address)
             
             # Adquirir os valores dos registradores
             self.parametros = self.print_holding_registers(lista)
@@ -143,6 +149,9 @@ class ModbusClientHandler(QObject):
             
             # Armazenar os valores dos registradores
             self.armazenar_leitura(self.parametros)
+
+            if self.post_requests:
+                self.executor.submit(self.send_parametros_to_firebase)
         except Exception as e:
             print(f"Erro ao tentar ler os registradores: {e}")
 
@@ -152,7 +161,7 @@ class ModbusClientHandler(QObject):
                 ['python', 'solar-platform-monitor-simulator\measure.py', field, str(value)],
                 capture_output=True,
                 text=True,
-                timeout=6  # Timeout in seconds
+                timeout=2  # Timeout in seconds
             )
             print(result.stdout)
             if result.returncode != 0:
@@ -161,6 +170,41 @@ class ModbusClientHandler(QObject):
             print(f"Timeout para o campo {field}, valor: {value}")
         except Exception as e:
             print(f"Erro no método post: {e}")
+
+    def build_firebase_payload(self):
+        """Cria payload JSON para enviar ao Firebase.
+
+        Usa lista de objetos para evitar chaves inválidas no Realtime Database.
+        """
+        return [
+            {
+                "name": parametro[1],
+                "value": parametro[0],
+                "unit": parametro[2]
+            }
+            for parametro in self.parametros
+        ]
+
+    def send_parametros_to_firebase(self, child_name="parametros"):
+        """Envia self.parametros ao Firebase Realtime Database usando requests."""
+        firebase_url = f"https://monitoramento-usf-default-rtdb.firebaseio.com/{child_name}.json"
+        payload = self.build_firebase_payload()
+
+        try:
+            response = requests.put(
+                firebase_url,
+                json=payload,
+                timeout=10
+            )
+            response.raise_for_status()
+            print(f"Firebase response: {response.text}")
+            return response.json()
+        except requests.exceptions.HTTPError as e:
+            print(f"Erro HTTP ao enviar para Firebase: {e.response.status_code} {e.response.text}")
+        except requests.exceptions.RequestException as e:
+            print(f"Erro de conexão com Firebase: {e}")
+        except Exception as e:
+            print(f"Erro inesperado ao enviar para Firebase: {e}")
 
     def getdata(self):
         return self.parametros

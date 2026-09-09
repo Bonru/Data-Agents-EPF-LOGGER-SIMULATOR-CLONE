@@ -82,6 +82,14 @@ fields = [
         "name": "radiacao_solar_ghi",
         "type": "float"
     },
+    {
+        "name": "Irradiance",
+        "type": "float"
+    },
+    {
+        "name": "Apparent Power",
+        "type": "float"
+    },
     
     #sem leituras
     {
