@@ -1,0 +1,114 @@
+"""A minimal Modbus TCP server for tests that can misbehave on demand.
+
+Supports function 3 (read holding registers) and 6 (write single register).
+`mode` switches how it answers: "normal", "slow" (waits `delay` seconds before
+each reply) or "hang" (reads requests and never answers). `drop_connections()`
+closes every open client connection; `stop()` shuts the server down entirely,
+which makes the port refuse connections.
+"""
+import socket
+import struct
+import threading
+import time
+
+
+class FakeModbusServer:
+    def __init__(self, registers=None):
+        self.registers = dict(registers or {})
+        self.writes = []  # (address, value) in arrival order
+        self.mode = "normal"
+        self.delay = 0.0
+        self._stopping = threading.Event()
+        self._connections = []
+        self._lock = threading.Lock()
+        self._listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self._listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self._listener.bind(("127.0.0.1", 0))
+        self._listener.listen()
+        self._listener.settimeout(0.1)
+        self.port = self._listener.getsockname()[1]
+        threading.Thread(target=self._accept_loop, daemon=True).start()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.stop()
+
+    def drop_connections(self):
+        with self._lock:
+            connections, self._connections = self._connections, []
+        for connection in connections:
+            _close_quietly(connection)
+
+    def stop(self):
+        self._stopping.set()
+        self.drop_connections()
+        _close_quietly(self._listener)
+
+    def _accept_loop(self):
+        while not self._stopping.is_set():
+            try:
+                connection, _ = self._listener.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                return
+            with self._lock:
+                self._connections.append(connection)
+            threading.Thread(target=self._serve, args=(connection,), daemon=True).start()
+
+    def _serve(self, connection):
+        try:
+            while not self._stopping.is_set():
+                header = _recv_exactly(connection, 7)
+                transaction, protocol, length, unit = struct.unpack(">HHHB", header)
+                pdu = _recv_exactly(connection, length - 1)
+                if not self._wait_before_reply():
+                    return
+                reply = self._handle(pdu)
+                connection.sendall(struct.pack(">HHHB", transaction, protocol, len(reply) + 1, unit) + reply)
+        except (OSError, ConnectionError):
+            pass
+        finally:
+            _close_quietly(connection)
+
+    def _wait_before_reply(self):
+        """Returns False if the server was stopped while it waited."""
+        if self.mode == "hang":
+            while self.mode == "hang":
+                if self._stopping.wait(0.05):
+                    return False
+        elif self.mode == "slow":
+            return not self._stopping.wait(self.delay)
+        return True
+
+    def _handle(self, pdu):
+        function = pdu[0]
+        if function == 3:
+            address, count = struct.unpack(">HH", pdu[1:5])
+            values = b"".join(struct.pack(">H", self.registers.get(address + i, 0)) for i in range(count))
+            return bytes([3, len(values)]) + values
+        if function == 6:
+            address, value = struct.unpack(">HH", pdu[1:5])
+            self.registers[address] = value
+            self.writes.append((address, value))
+            return pdu
+        return bytes([function | 0x80, 1])  # illegal function
+
+
+def _recv_exactly(connection, size):
+    data = b""
+    while len(data) < size:
+        chunk = connection.recv(size - len(data))
+        if not chunk:
+            raise ConnectionError("closed")
+        data += chunk
+    return data
+
+
+def _close_quietly(sock):
+    try:
+        sock.close()
+    except OSError:
+        pass

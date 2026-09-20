@@ -223,7 +223,3 @@ class ModbusClientHandler(QObject):
             print("Fechando cliente...")
             self.client.close()
             print("Cliente Fechado")
-    
-
-ModbusClientHandler().start()
-
