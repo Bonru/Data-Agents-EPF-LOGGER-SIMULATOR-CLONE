@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 from PyQt6.QtCore import QPoint, QRect
 from PyQt6.QtGui import QColor
-from PyQt6.QtWidgets import QAbstractScrollArea, QLabel, QLineEdit, QPushButton, QWidget
+from PyQt6.QtWidgets import QAbstractScrollArea, QApplication, QLabel, QLineEdit, QPushButton, QWidget
 
 from datalogger_client.core.registry import CHANNELS
-from datalogger_client.ui.layout import columns_for_width, header_fits_one_row
+from datalogger_client.ui.layout import MINIMUM_WINDOW_SIZE, columns_for_width
 from datalogger_client.ui.main_window import MainWindow
 from tests.support.fake_transport import FakeTransport
 from tests.support.heartbeat import Heartbeat, run_for, run_until
@@ -30,6 +30,21 @@ def window(qapp):
     run_for(200)
     yield window
     window.close()
+
+
+STYLES = ["Fusion", "Windows", "windowsvista"]  # they differ in scroll bar and frame sizes
+
+
+@pytest.fixture(params=STYLES)
+def styled_window(qapp, request):
+    """The same window under each Qt style: a layout that fits by a pixel in one style overflows in another."""
+    QApplication.setStyle(request.param)
+    window = MainWindow(FakeTransport({224: 32, 500: 100}), poll_interval_ms=200)
+    window.show()
+    run_for(200)
+    yield window
+    window.close()
+    QApplication.setStyle("Fusion")
 
 
 def show_view(window, view):
@@ -129,7 +144,8 @@ def test_no_two_cards_overlap(window, width, view):
 
 @pytest.mark.parametrize("view", VIEWS)
 @pytest.mark.parametrize("width", WIDTHS)
-def test_no_widget_is_clipped_by_its_parent_without_a_scroll_bar_to_reach_it(window, width, view):
+def test_no_widget_is_clipped_by_its_parent_without_a_scroll_bar_to_reach_it(styled_window, width, view):
+    window = styled_window
     show_view(window, view)
     resize_to(window, width)
 
@@ -142,12 +158,38 @@ def test_no_widget_is_clipped_by_its_parent_without_a_scroll_bar_to_reach_it(win
 
 @pytest.mark.parametrize("view", VIEWS)
 @pytest.mark.parametrize("width", WIDTHS)
-def test_neither_the_main_area_nor_the_sidebar_needs_a_horizontal_scroll_bar(window, width, view):
+def test_neither_the_main_area_nor_the_sidebar_needs_a_horizontal_scroll_bar(styled_window, width, view):
+    window = styled_window
     show_view(window, view)
     resize_to(window, width)
 
     assert window.scroll_area.horizontalScrollBar().maximum() == 0
     assert window.sidebar_area.horizontalScrollBar().maximum() == 0
+
+
+@pytest.mark.parametrize("view", VIEWS)
+def test_the_layout_fits_at_the_smallest_size_the_window_allows(styled_window, view):
+    """The declared minimum window size must not be smaller than what the layout needs."""
+    window = styled_window
+    show_view(window, view)
+    minimum_width, minimum_height = MINIMUM_WINDOW_SIZE
+
+    window.resize(100, 100)  # ask for less than the minimum
+    run_for(150)
+
+    assert (window.width(), window.height()) == (minimum_width, minimum_height)
+    assert window.scroll_area.horizontalScrollBar().maximum() == 0
+    assert window.sidebar_area.horizontalScrollBar().maximum() == 0
+    assert clipped(window) == []
+
+
+@pytest.mark.parametrize("height", [500, 700, 1200])
+def test_nothing_is_clipped_at_other_window_heights(styled_window, height):
+    window = styled_window
+    for width in WIDTHS:
+        resize_to(window, width, height)
+        assert clipped(window) == []
+        assert window.scroll_area.horizontalScrollBar().maximum() == 0
 
 
 @pytest.mark.parametrize("width", WIDTHS)
@@ -163,14 +205,42 @@ def test_the_content_can_be_scrolled_to_vertically(window, width):
 
 
 @pytest.mark.parametrize("width", WIDTHS)
-def test_the_header_is_compact_in_narrow_windows_and_still_holds_everything(window, width):
+def test_the_header_still_holds_everything_in_either_arrangement(window, width):
     resize_to(window, width)
 
-    assert window.header_compact == (not header_fits_one_row(width, window.header_regular_min_width))
     header = window.header_widget
     for widget in (window.status_area, window.config_button, window.close_button):
         assert not widget.isHidden()
         assert header.rect().contains(widget.geometry())
+    assert header.width() >= header.minimumSizeHint().width()  # what it needs, in the arrangement it has
+
+
+def test_the_header_is_one_row_in_a_wide_window_and_stacked_in_a_narrow_one(window):
+    def rectangles():
+        parts = (window.status_area, window.config_button, window.close_button)
+        return [QRect(part.mapTo(window, QPoint(0, 0)), part.size()) for part in parts]
+
+    resize_to(window, 1920)
+    wide, wide_is_compact = rectangles(), window.header_compact
+    resize_to(window, 400)
+    narrow, narrow_is_compact = rectangles(), window.header_compact
+
+    assert not wide_is_compact and narrow_is_compact
+    # one row: every item overlaps the others vertically (they sit side by side)
+    assert all(a.top() <= b.bottom() and b.top() <= a.bottom() for a, b in combinations(wide, 2))
+    # stacked: each item is entirely above the next
+    assert narrow[0].bottom() < narrow[1].top() and narrow[1].bottom() < narrow[2].top()
+    assert window.header_widget.width() > window.sidebar_area.width()  # and the header now spans the page
+
+
+def test_the_header_rearranges_as_the_window_grows_and_shrinks(window):
+    states = []
+    for width in [400, 1920, 400, 1200, 800, 1920]:
+        resize_to(window, width)
+        states.append(window.header_compact)
+
+    assert states[0] and not states[1] and states[2]  # it follows the width in both directions
+    assert states[-1] is False
 
 
 # --- the look is kept -------------------------------------------------------------------------------
@@ -232,9 +302,10 @@ def test_a_screenshot_is_saved_at_each_width_and_view(window, width, view):
 # --- no sizes from the screen or in pixels -------------------------------------------------------------
 
 FORBIDDEN = {
-    "a fixed size": r"\bsetFixed(Size|Width|Height)\b",
+    "a fixed size": r"\bset(Fixed|Maximum)(Size|Width|Height)\b",
+    "a hand-set geometry": r"\bsetGeometry\b|\.resize\(\s*int\(",
     "the screen geometry": r"primaryScreen|availableGeometry|screenGeometry|\.screens?\(\)",
-    "a pixel font size": r"font-size:\s*[\d.]+px|setPixelSize",
+    "a pixel font size": r"font-size:\s*(\{[^}]*\}|[\d.]+)\s*px|setPixelSize",
 }
 
 
@@ -253,5 +324,9 @@ def test_the_source_check_really_catches_each_kind_of_violation():
     assert find_violations("g = QApplication.primaryScreen().geometry()")
     assert find_violations("label.setStyleSheet('font-size: 18px;')")
     assert find_violations("font.setPixelSize(32)")
+    assert find_violations("w.setMaximumWidth(200)") and find_violations("w.setMaximumSize(1, 1)")
+    assert find_violations("self.setGeometry(0, 0, 10, 10)") and find_violations("self.resize(int(w * 0.8), 5)")
+    assert find_violations("f'font-size: {size}px;'")  # a pixel size hidden in an f-string
+    assert find_violations("self.resize(*DEFAULT_WINDOW_SIZE)") == []  # a size from constants is fine
     assert find_violations("font-size: 10pt; padding: 6px") == []  # points, and other pixel values, are fine
     assert UI_SOURCES  # and it looks at something

@@ -4,6 +4,7 @@ import pytest
 from datalogger_client.ui.layout import (
     CONTENT_STRETCH,
     DEFAULT_WINDOW_SIZE,
+    HEADER_FIT_SLACK,
     MAX_COLUMNS,
     MIN_COLUMNS,
     MINIMUM_WINDOW_SIZE,
@@ -14,7 +15,7 @@ from datalogger_client.ui.layout import (
     columns_for_width,
     header_fits_one_row,
     header_width_available,
-    row_after,
+    rows_needed,
 )
 
 
@@ -52,16 +53,25 @@ def test_the_header_gets_what_is_left_beside_the_sidebar_column():
 def test_in_a_wide_window_the_sidebar_takes_its_stretch_share_and_in_a_narrow_one_its_minimum():
     wide, narrow = 3000, 400
 
-    assert header_width_available(wide) == (wide - 55) - (wide - 55) // 9
-    assert header_width_available(narrow) == (narrow - 55) - SIDEBAR_MIN_WIDTH
+    around = 2 * OUTER_MARGIN + OUTER_SPACING
+    assert header_width_available(wide) == (wide - around) - (wide - around) // 9
+    assert header_width_available(narrow) == (narrow - around) - SIDEBAR_MIN_WIDTH
 
 
 def test_the_header_fits_one_row_only_when_the_space_beside_the_sidebar_is_enough():
     needed = 500
     fits_from = next(w for w in range(300, 3000) if header_fits_one_row(w, needed))
 
-    assert header_width_available(fits_from) >= needed > header_width_available(fits_from - 1)
+    assert header_width_available(fits_from) >= needed + HEADER_FIT_SLACK > header_width_available(fits_from - 1)
     assert all(header_fits_one_row(w, needed) for w in range(fits_from, 3000))  # and it stays fitting
+
+
+def test_the_slack_makes_a_borderline_header_stack_rather_than_overflow():
+    width = 1200
+    borderline = header_width_available(width)  # exactly what the estimate says is available
+
+    assert not header_fits_one_row(width, borderline)
+    assert header_fits_one_row(width, borderline - HEADER_FIT_SLACK)
 
 
 def test_a_bigger_font_needs_a_wider_window_for_one_row():
@@ -69,7 +79,7 @@ def test_a_bigger_font_needs_a_wider_window_for_one_row():
 
 
 def test_row_after_the_last_row_that_holds_items():
-    assert row_after(21, 1) == 21
-    assert row_after(21, 2) == 11
-    assert row_after(21, 3) == 7
-    assert row_after(21, 4) == 6
+    assert rows_needed(21, 1) == 21
+    assert rows_needed(21, 2) == 11
+    assert rows_needed(21, 3) == 7
+    assert rows_needed(21, 4) == 6

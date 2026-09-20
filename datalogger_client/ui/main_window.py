@@ -1,4 +1,7 @@
-from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QGridLayout, QLabel, QPushButton, QVBoxLayout, QLineEdit, QScrollArea
+from PyQt6.QtWidgets import (
+    QApplication, QGridLayout, QLabel, QLineEdit, QMainWindow, QPushButton, QScrollArea, QSizePolicy, QVBoxLayout,
+    QWidget,
+)
 from PyQt6.QtGui import QColor, QFont
 from PyQt6.QtCore import QPoint, QRect, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QPalette
@@ -15,7 +18,7 @@ from .charts import ChannelChart
 from .layout import (
     CONTENT_STRETCH, CONTROL_POINT_SIZE, DEFAULT_WINDOW_SIZE, HEADER_MIN_HEIGHT, MAX_COLUMNS, MINIMUM_WINDOW_SIZE,
     GRID_MARGIN, GRID_SPACING, OUTER_MARGIN, OUTER_SPACING, SIDEBAR_MIN_WIDTH, SIDEBAR_STRETCH, TITLE_POINT_SIZE, columns_for_width,
-    header_fits_one_row, row_after,
+    header_fits_one_row, rows_needed,
 )
 from .override_field import OverrideField
 from .status import FirebaseStatus, StatusArea
@@ -115,6 +118,7 @@ class MainWindow(QMainWindow):
         """Barra superior azul: área de status e botões. Em janelas estreitas os itens são empilhados."""
         self.header_widget = QWidget()
         self.header_widget.setMinimumHeight(HEADER_MIN_HEIGHT)
+        self.header_widget.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)
         self.header_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
         self.status_area = StatusArea()
         self.config_button = self._header_button("Exibir Gráfico", self.toggle_view)
@@ -237,6 +241,7 @@ class MainWindow(QMainWindow):
         self.sidebar_area = QScrollArea()
         self.sidebar_area.setWidgetResizable(True)
         self.sidebar_area.setMinimumWidth(SIDEBAR_MIN_WIDTH)
+        self.sidebar_area.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
         self.sidebar_area.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
         self.sidebar_area.setWidget(content)
         return self.sidebar_area
@@ -252,6 +257,7 @@ class MainWindow(QMainWindow):
 
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         scroll_content = QWidget()
         self._grid = QGridLayout(scroll_content)
         self._grid.setSpacing(GRID_SPACING)
@@ -278,7 +284,7 @@ class MainWindow(QMainWindow):
             grid.setColumnStretch(column, 1 if column < columns else 0)
         for row in range(len(CHANNELS) + 2):
             grid.setRowStretch(row, 0)
-        grid.setRowStretch(row_after(len(CHANNELS) + 1, columns), 1)  # a folga vertical fica abaixo dos cartões
+        grid.setRowStretch(rows_needed(len(CHANNELS) + 1, columns), 1)  # a folga vertical fica abaixo dos cartões
 
     def _reflow(self, window_width):
         """Recompute what depends on the window width; called on every resize."""
@@ -286,6 +292,8 @@ class MainWindow(QMainWindow):
         if columns != self.grid_columns:
             self.grid_columns = columns
             self._place_grid_items(columns)
+        if not self.header_compact:  # measured only while it is one row, which is what it is measuring
+            self.header_regular_min_width = self.header_widget.minimumSizeHint().width()
         compact = not header_fits_one_row(window_width, self.header_regular_min_width)
         if compact != self.header_compact:
             self._arrange_page(compact)
