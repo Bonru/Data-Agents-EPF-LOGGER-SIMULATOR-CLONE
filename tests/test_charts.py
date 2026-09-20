@@ -209,6 +209,43 @@ def test_no_canvas_outside_the_viewport_ever_draws_itself(window):
     assert len(window.canvas_draws) == len(window.drawn)  # every real draw was one of ours
 
 
+def test_overlapping_requests_never_draw_more_than_one_chart_per_pass(window):
+    show_charts(window)
+    window.drawn.clear()
+
+    window.on_frame(make_frame(2.0))  # starts a chain of passes...
+    window.on_frame(make_frame(3.0))  # ...which later requests join rather than start another
+    window.on_frame(make_frame(4.0))
+    bar = window.scroll_area.verticalScrollBar()
+    bar.setValue(bar.maximum())
+    window.draw_visible_charts()
+
+    assert len(window.drawn) == 1  # only the first pass ran; the rest wait for the event loop
+    settle(window)
+    assert set(window.drawn) >= visible_chart_names(window)  # and the chain still gets every chart done
+
+
+def test_a_frame_arriving_right_after_the_toggle_draws_nothing_until_the_charts_are_placed(window):
+    window.toggle_view()  # Qt has not laid the charts out yet: their positions cannot be trusted
+    window.on_frame(make_frame(2.0))
+
+    assert window.drawn == []
+
+    settle(window)
+    assert set(window.drawn) == visible_chart_names(window)  # only the ones really in view, drawn once placed
+
+
+def test_a_pending_draw_does_nothing_once_the_window_is_closed(window):
+    show_charts(window)
+    window.on_frame(make_frame(2.0))  # leaves more charts stale, so a pass is scheduled
+    drawn_before = len(window.drawn)
+
+    window.close()
+    run_for(300)
+
+    assert len(window.drawn) == drawn_before
+
+
 def test_toggling_back_to_the_data_view_draws_nothing_and_hidden_charts_stay_undrawn(window):
     show_charts(window)
     window.drawn.clear()

@@ -107,14 +107,15 @@ def test_the_ui_does_not_stall_with_six_or_more_charts_visible_while_frames_arri
         visible = [chart for chart in window.charts.values() if window.is_in_viewport(chart.canvas)]
         assert len(visible) >= 6
         frames_before = window.history.version
+        drawn_before = {chart.channel.name: chart.drawn_version for chart in visible}
         heartbeat = Heartbeat(interval_ms=20)
         heartbeat.start()
         run_for(MEASURE_MS)
         heartbeat.stop()
         frames_seen = window.history.version - frames_before
-        drawn_current = all(not chart.needs_redraw(window.history) for chart in visible)
+        redrawn = [chart for chart in visible if chart.drawn_version > drawn_before[chart.channel.name]]
         window.close()
 
-    assert frames_seen >= 3  # charts really were redrawn during the measurement
-    assert drawn_current
+    assert frames_seen >= 3
+    assert len(redrawn) == len(visible)  # every visible chart really was redrawn while the heartbeat ran
     assert heartbeat.max_gap_ms < MAX_STALL_MS

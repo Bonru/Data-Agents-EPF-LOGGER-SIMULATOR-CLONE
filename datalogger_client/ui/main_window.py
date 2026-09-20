@@ -15,7 +15,6 @@ from .override_field import OverrideField
 from .status import StatusArea
 
 WORKER_STOP_WAIT_MS = 3000
-CHARTS_PER_PASS = 1  # a chart takes ~10-15 ms to draw; one per event-loop pass keeps the UI answering
 
 
 class MainWindow(QMainWindow):
@@ -30,6 +29,8 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.charts_visible = False
         self._shut_down = False
+        self._charts_placed = False  # Qt has laid out the charts since the view was toggled
+        self._draw_pass_pending = False  # a chart-drawing pass is already scheduled
         self.worker_abandoned = False  # True if the worker did not stop in time
 
         # Configuração da janela principal
@@ -262,23 +263,35 @@ class MainWindow(QMainWindow):
         self.channel_cards.set_dimmed(state != ConnectionState.CONNECTED)
 
     def draw_visible_charts(self):
-        """Draw the charts that are inside the scroll viewport and out of date.
+        """Have the charts that are inside the scroll viewport and out of date drawn.
 
         Nothing is drawn in the data view. In the chart view this runs when a Frame arrives, when a
         chart is scrolled into view and when the view is toggled; charts outside the viewport wait.
-        At most CHARTS_PER_PASS are drawn at a time; the rest follow on the next event-loop pass,
-        so drawing many charts never blocks the UI for long.
+        One chart is drawn per event-loop pass (each takes ~10-15 ms), so drawing many of them
+        never blocks the UI for long. Only one chain of passes runs at a time: a request made while
+        one is pending is picked up by it, because every pass looks at what is stale at that moment.
         """
-        if not self.charts_visible:
+        if not self._draw_pass_pending:
+            self._draw_next_chart()
+
+    def _draw_next_chart(self):
+        self._draw_pass_pending = False
+        if self._shut_down or not self.charts_visible or not self._charts_placed:
             return
         stale = [
             chart for chart in self.charts.values()
             if chart.needs_redraw(self.history) and self.is_in_viewport(chart.canvas)
         ]
-        for chart in stale[:CHARTS_PER_PASS]:
-            chart.redraw(self.history)
-        if len(stale) > CHARTS_PER_PASS:
-            QTimer.singleShot(0, self.draw_visible_charts)
+        if stale:
+            stale[0].redraw(self.history)
+        if len(stale) > 1:
+            self._draw_pass_pending = True
+            QTimer.singleShot(0, self._draw_next_chart)
+
+    def _charts_are_placed(self):
+        """Qt has laid the charts out (it does so on the event-loop pass after the toggle)."""
+        self._charts_placed = True
+        self.draw_visible_charts()
 
     def is_in_viewport(self, widget):
         """Whether any part of the widget (inside the scroll area's content) can be seen."""
@@ -297,9 +310,11 @@ class MainWindow(QMainWindow):
                 self.charts[channel.name].canvas.show()
             # Qt places the charts (and sizes the scroll area) on the next event-loop pass; ask
             # which are inside the viewport only after that, so it is answered from where they really are.
-            QTimer.singleShot(0, self.draw_visible_charts)
+            self._charts_placed = False
+            QTimer.singleShot(0, self._charts_are_placed)
         else:
             # Oculta gráficos e exibe cartões
+            self._charts_placed = False
             self.config_button.setText("Exibir Gráfico")
             for channel in CHANNELS:
                 self.charts[channel.name].canvas.hide()
