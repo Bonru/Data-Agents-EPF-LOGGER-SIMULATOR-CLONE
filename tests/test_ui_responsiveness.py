@@ -1,7 +1,7 @@
 """The UI event loop must never stall, whatever the Simulator does."""
 import pytest
 
-from datalogger_client.io_layer.channels import CHANNELS
+from datalogger_client.core.registry import CHANNELS
 from datalogger_client.io_layer.transport import ModbusTcpTransport
 from datalogger_client.ui.main_window import MainWindow
 from tests.support.heartbeat import Heartbeat, run_for, run_until
@@ -80,9 +80,9 @@ def test_the_ui_recovers_when_a_late_simulator_appears(qapp):
         window = MainWindow(transport, poll_interval_ms=100, submit_firebase=lambda payload: None)
         window.show()
         run_for(600)
-        assert window.cards[0].label.text().startswith(f"{CHANNELS[0].label}: --")
+        assert window.cards["velocidade_vento"].label.text().startswith(f"{CHANNELS[0].label}: --")
 
         server.mode = "normal"
 
-        assert run_until(lambda: window.cards[0].label.text() == "Vel. vento: 3.2 m/s", timeout_ms=4000)
+        assert run_until(lambda: window.cards["velocidade_vento"].label.text() == "Vel. vento: 3.2 m/s", timeout_ms=4000)
         window.close()

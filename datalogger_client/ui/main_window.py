@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt6.QtGui import QIntValidator
 
-from ..io_layer.channels import CHANNELS, OVERRIDABLE_CHANNELS
+from ..core.registry import CHANNELS
 from ..io_layer.transport import ModbusTcpTransport
 from ..io_layer.worker import ModbusWorker
 from .adapter import CompatibilityAdapter, submit_to_firebase
@@ -20,7 +20,7 @@ class MainWindow(QMainWindow):
     write_requested = pyqtSignal(int, int)
     stop_requested = pyqtSignal()
 
-    def __init__(self, transport=None, poll_interval_ms=2000, submit_firebase=submit_to_firebase):
+    def __init__(self, transport=None, poll_interval_ms=500, submit_firebase=submit_to_firebase):
         super().__init__()
         self.charts_visible = False
         self._shut_down = False
@@ -109,7 +109,7 @@ class MainWindow(QMainWindow):
         sidebar_widget.setFixedSize(int(width * 0.11), int(height * 0.9))
         sidebar_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
         sidebar_layout = QVBoxLayout()
-        self.line_edits = []
+        self.manual_fields = {}  # overridable Channel -> its input
 
         sidebar_layout.setContentsMargins(10, 10, 10, 10)
 
@@ -137,7 +137,7 @@ class MainWindow(QMainWindow):
         scroll_content_sidebar = QWidget()
         scroll_content_sidebar.setLayout(sidebar_layout)
 
-        for channel in OVERRIDABLE_CHANNELS:
+        for channel in (channel for channel in CHANNELS if channel.overridable):
             label = QLabel(channel.label)
             label.setStyleSheet(label_style)
             label.setFixedSize(*fixed_size)
@@ -152,7 +152,7 @@ class MainWindow(QMainWindow):
             line_edit.setValidator(QIntValidator())  # Permitindo apenas entrada de números
             sidebar_layout.addWidget(line_edit, alignment=Qt.AlignmentFlag.AlignCenter)
 
-            self.line_edits.append(line_edit)  # Adiciona o LineEdit à lista
+            self.manual_fields[channel] = line_edit
             sidebar_layout.addWidget(QWidget(), alignment=Qt.AlignmentFlag.AlignCenter) #espaçamento
 
         scroll_area_sidebar.setWidget(scroll_content_sidebar)
@@ -166,21 +166,25 @@ class MainWindow(QMainWindow):
         scroll_layout.setSpacing(20)
 
         self.channel_cards = ChannelCards((int(width * 0.28), int(height * 0.1)))
-        self.cards = self.channel_cards.cards
-        self.graphs = []
+        self.cards = self.channel_cards.cards  # Channel name -> card
+        self.graphs = {}  # Channel name -> chart canvas
 
         # Preenchendo a grade com os cartões e os gráficos
-        for index, card in enumerate(self.cards):
+        for index, channel in enumerate(CHANNELS):
             row, col = divmod(index, 3)
             # Widget para gráfico com canvas do matplotlib
             graph_canvas = FigureCanvas(plt.Figure(figsize=(5, 4)))
             graph_canvas.setFixedSize(int(width * 0.3), int(height * 0.25))
-            self.graphs.append(graph_canvas)
+            self.graphs[channel.name] = graph_canvas
 
             # Adicionar widgets ao grid
-            scroll_layout.addWidget(card, row, col)
+            scroll_layout.addWidget(self.cards[channel.name], row, col)
             scroll_layout.addWidget(graph_canvas, row, col)
             graph_canvas.hide()  # Ocultar gráficos inicialmente
+
+        # O cartão do Timestamp do Frame ocupa a próxima célula (não tem gráfico)
+        row, col = divmod(len(CHANNELS), 3)
+        scroll_layout.addWidget(self.channel_cards.timestamp_card, row, col)
 
         scroll_content.setLayout(scroll_layout)
         scroll_area.setWidget(scroll_content)
@@ -197,14 +201,14 @@ class MainWindow(QMainWindow):
         self.error_label.setStyleSheet("color: red;")
         layout.addWidget(self.error_label, 2, 1, 1, 1)
 
-        self.adapter = CompatibilityAdapter(self.line_edits, self.write_requested.emit, submit_firebase)
+        self.adapter = CompatibilityAdapter(self.manual_fields, self.write_requested.emit, submit_firebase)
 
         # O worker é dono de toda a I/O Modbus e do timer de Poll, em sua própria thread
         self._worker = ModbusWorker(transport or ModbusTcpTransport(), poll_interval_ms)
         self._thread = QThread()
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.start)
-        self._worker.snapshot_ready.connect(self.on_snapshot, Qt.ConnectionType.QueuedConnection)
+        self._worker.frame_ready.connect(self.on_frame, Qt.ConnectionType.QueuedConnection)
         self.write_requested.connect(self._worker.write_register, Qt.ConnectionType.QueuedConnection)
         self.stop_requested.connect(self._worker.stop, Qt.ConnectionType.QueuedConnection)
         # Direct: the QThread lives on the UI thread, which is blocked in shutdown() while waiting.
@@ -213,16 +217,16 @@ class MainWindow(QMainWindow):
         self._thread.start()
 
     @pyqtSlot(object)
-    def on_snapshot(self, snapshot):
-        self.channel_cards.show_snapshot(snapshot)
-        self.adapter.consume(snapshot)
+    def on_frame(self, frame):
+        self.channel_cards.show_frame(frame)
+        self.adapter.consume(frame)
         if self.charts_visible:
             self.redraw_charts()
         self.error_label.setText("")
 
     def redraw_charts(self):
-        for graph_canvas, channel in zip(self.graphs, CHANNELS):
-            self.display_graph(graph_canvas, channel.label)
+        for channel in CHANNELS:
+            self.display_graph(self.graphs[channel.name], channel)
 
     # Método para alternar entre exibição de dados e gráficos
     def toggle_view(self):
@@ -230,19 +234,21 @@ class MainWindow(QMainWindow):
         if self.charts_visible:
             # Oculta os cartões e exibe gráficos
             self.config_button.setText("Exibir Dados")
-            for card, graph_canvas, channel in zip(self.cards, self.graphs, CHANNELS):
-                card.hide()
-                self.display_graph(graph_canvas, channel.label)
-                graph_canvas.show()
+            self.channel_cards.timestamp_card.hide()
+            for channel in CHANNELS:
+                self.cards[channel.name].hide()
+                self.display_graph(self.graphs[channel.name], channel)
+                self.graphs[channel.name].show()
         else:
             # Oculta gráficos e exibe cartões
             self.config_button.setText("Exibir Gráfico")
-            for card, graph_canvas in zip(self.cards, self.graphs):
-                graph_canvas.hide()
-                card.show()
+            for channel in CHANNELS:
+                self.graphs[channel.name].hide()
+                self.cards[channel.name].show()
+            self.channel_cards.timestamp_card.show()
 
     # Método para exibir gráficos
-    def display_graph(self, graph_canvas, data_type):
+    def display_graph(self, graph_canvas, channel):
         ax = graph_canvas.figure.subplots()
         fig = graph_canvas.figure
         ax.clear()
@@ -254,26 +260,22 @@ class MainWindow(QMainWindow):
         ax = fig.add_subplot(111)
 
         # Gerar o gráfico
-        dados = self.adapter.chart_history
-        if data_type in dados:
-            x = dados["Timestamp"]
-            y = dados[data_type]
-            ax.plot(x, y, marker='o')
-            ax.set_title(f"Gráfico de {data_type}")
-            ax.set_xlabel("Tempo")
+        history = self.adapter.chart_history
+        x = history.timestamps
+        y = history.values[channel.name]
+        ax.plot(x, y, marker='o')
+        ax.set_title(f"Gráfico de {channel.label}")
+        ax.set_xlabel("Tempo")
 
-            # Definir ticks do eixo x para mostrar apenas 5 valores igualmente espaçados
-            num_ticks = 4
-            if len(x) > num_ticks:
-                tick_positions = [x[i] for i in range(0, len(x), len(x) // num_ticks)]
-                ax.set_xticks(tick_positions)
-                ax.set_xticklabels([x[i] for i in range(0, len(x), len(x) // num_ticks)])
-            else:
-                ax.set_xticks(x)
-                ax.set_xticklabels(x)
-
+        # Definir ticks do eixo x para mostrar apenas 5 valores igualmente espaçados
+        num_ticks = 4
+        if len(x) > num_ticks:
+            tick_positions = [x[i] for i in range(0, len(x), len(x) // num_ticks)]
+            ax.set_xticks(tick_positions)
+            ax.set_xticklabels([x[i] for i in range(0, len(x), len(x) // num_ticks)])
         else:
-            self.error_label.setText(f"Dados de {data_type} não encontrados.")
+            ax.set_xticks(x)
+            ax.set_xticklabels(x)
 
         graph_canvas.draw()
 

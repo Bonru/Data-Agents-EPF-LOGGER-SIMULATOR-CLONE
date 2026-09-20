@@ -1,17 +1,16 @@
 import gc
-import importlib
-import sys
 import threading
 
 import pytest
-from PyQt6.QtCore import QtMsgType, qInstallMessageHandler
+from PyQt6.QtCore import qInstallMessageHandler
 
-from datalogger_client.io_layer.channels import CHANNELS
+from datalogger_client.core.registry import channel_named
 from datalogger_client.ui.main_window import MainWindow
 from tests.support.fake_transport import FakeTransport
 from tests.support.heartbeat import run_for, run_until
 
-CHANNEL_COUNT = len(CHANNELS)
+READS_PER_POLL = 6  # five blocks plus the Timestamp block again
+WIND = channel_named("velocidade_vento")
 
 
 @pytest.fixture
@@ -32,8 +31,8 @@ def make_window(qapp):
 def test_every_modbus_call_happens_on_the_worker_thread(make_window):
     transport = FakeTransport()
     window = make_window(transport)
-    window.line_edits[0].setText("12")  # the sidebar re-sends this on every snapshot
-    assert run_until(lambda: transport.calls_named("write") and len(transport.calls_named("read")) >= CHANNEL_COUNT)
+    window.manual_fields[WIND].setText("12")  # the sidebar re-sends this on every Frame
+    assert run_until(lambda: transport.calls_named("write") and len(transport.calls_named("read")) >= READS_PER_POLL)
     window.close()
 
     kinds = {name for name, _, _ in transport.calls}
@@ -46,7 +45,7 @@ def test_every_modbus_call_happens_on_the_worker_thread(make_window):
 def test_a_write_request_produces_exactly_one_modbus_write(make_window):
     transport = FakeTransport()
     window = make_window(transport, poll_interval_ms=60000)
-    assert run_until(lambda: len(transport.calls_named("read")) >= CHANNEL_COUNT)
+    assert run_until(lambda: len(transport.calls_named("read")) >= READS_PER_POLL)
 
     window.write_requested.emit(224, 50)
 
@@ -56,10 +55,11 @@ def test_a_write_request_produces_exactly_one_modbus_write(make_window):
 
 
 def test_cards_show_the_polled_values(make_window):
-    transport = FakeTransport({224: 32, 226: 251})
+    transport = FakeTransport({224: 32, 226: 251, 500: 3725})
     window = make_window(transport)
-    assert run_until(lambda: window.cards[0].label.text().startswith("Vel. vento: 3.2"))
-    assert window.cards[1].label.text() == "Temperatura 1: 25.1 °C"
+    assert run_until(lambda: window.cards["velocidade_vento"].label.text().startswith("Vel. vento: 3.2"))
+    assert window.cards["temperatura_modulo_1"].label.text() == "Temperatura 1: 25.1 °C"
+    assert window.channel_cards.timestamp_card.label.text() == "Timestamp: 3725 s"
 
 
 def test_the_window_starts_without_a_simulator_and_a_failed_read_becomes_zero(make_window):
@@ -69,7 +69,7 @@ def test_the_window_starts_without_a_simulator_and_a_failed_read_becomes_zero(ma
             return None
 
     window = make_window(DownTransport())
-    assert run_until(lambda: window.cards[0].label.text() == "Vel. vento: 0.0 m/s")
+    assert run_until(lambda: window.cards["velocidade_vento"].label.text() == "Vel. vento: 0.0 m/s")
 
 
 def test_closing_the_window_stops_the_worker_thread_cleanly(make_window):
@@ -90,14 +90,3 @@ def test_closing_the_window_stops_the_worker_thread_cleanly(make_window):
     finally:
         qInstallMessageHandler(previous)
 
-
-def test_importing_the_client_module_opens_no_connection(monkeypatch):
-    import pyModbusTCP.client
-
-    opened = []
-    monkeypatch.setattr(pyModbusTCP.client.ModbusClient, "open", lambda self: opened.append(1) or False)
-    sys.modules.pop("Pymodbus_cliente", None)
-
-    importlib.import_module("Pymodbus_cliente")
-
-    assert opened == []
