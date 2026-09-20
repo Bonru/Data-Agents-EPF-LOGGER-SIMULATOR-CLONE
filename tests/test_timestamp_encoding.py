@@ -1,7 +1,5 @@
 """The Timestamp in register 500 is seconds of day // 2, so it fits 16 bits for the whole day, and the Client decodes it."""
-import os
 import socket
-from pathlib import Path
 
 import pytest
 from pyModbusTCP.server import ModbusServer
@@ -14,7 +12,6 @@ from datalogger_client.io_layer.worker import ModbusWorker
 from datalogger_client.ui.cards import ChannelCards
 from datalogger_client.ui.charts import ChannelChart
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
 MAX_REGISTER = 65535
 MAX_ENCODED = 43199  # 86399 // 2
 
@@ -22,18 +19,6 @@ MAX_ENCODED = 43199  # 86399 // 2
 def seconds_of(time_text):
     hours, minutes, seconds = (int(part) for part in time_text.split(":"))
     return hours * 3600 + minutes * 60 + seconds
-
-
-@pytest.fixture(scope="session")
-def simulator():
-    """The Simulator module. It reads the spreadsheet when imported, from the working directory."""
-    previous = os.getcwd()
-    os.chdir(REPO_ROOT)
-    try:
-        import Pymodbus_Server
-    finally:
-        os.chdir(previous)
-    return Pymodbus_Server
 
 
 def quiet_bank(simulator):

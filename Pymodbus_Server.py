@@ -5,6 +5,7 @@ import pandas as pd
 from pyModbusTCP.server import ModbusServer, DataBank
 import threading
 import time
+import traceback
 
 logging.basicConfig()
 logging.getLogger('pyModbusTCP.server').setLevel(logging.DEBUG)
@@ -16,10 +17,13 @@ df = pd.read_excel('Datalogger_28_11_2024.xlsx')
 TIMESTAMP_SECONDS_PER_REGISTER = 2
 
 class MyDataBank(DataBank):
-    def __init__(self):
+    def __init__(self, dataset=None, tick_seconds=2):
+        """dataset: DataFrame com as linhas a servir (padrão: a planilha carregada acima).
+        tick_seconds: segundos entre uma linha e a próxima (padrão: 2)."""
         super().__init__()
-        self.timer = 2
-        self.leitura = 0
+        self.dataset = df if dataset is None else dataset
+        self.timer = tick_seconds
+        self.leitura = 0  # número da próxima linha a ler
         self.lista = []
         self.start(0)
         self.update_thread = threading.Thread(target=self.update_values_periodically)
@@ -29,6 +33,17 @@ class MyDataBank(DataBank):
     def sheet_values(self, n_leitura, df):
         row = df.iloc[n_leitura].to_dict()
         return row
+
+    # Função que escolhe a próxima linha; depois da última, volta para a primeira
+    def next_row_number(self):
+        """Número da próxima linha a ler. O contador avança já aqui, então uma linha que falhar
+        não é lida de novo no tick seguinte."""
+        if self.leitura >= len(self.dataset):
+            print("End of dataset reached; restarting from the first row.")
+            self.leitura = 0
+        row_number = self.leitura
+        self.leitura += 1
+        return row_number
     
     # Função para formatar os dados
     def treat_data(self, value):
@@ -54,7 +69,7 @@ class MyDataBank(DataBank):
         
     # Função para retornar os novos valores da proxima consulta na planilha
     def new_values(self):
-        parametros = self.sheet_values(self.leitura, df)
+        parametros = self.sheet_values(self.next_row_number(), self.dataset)
 
         #Leituras
         self.v_vento = self.treat_data(parametros['v_vento']) # i = 0
@@ -81,7 +96,6 @@ class MyDataBank(DataBank):
         #Device Fault Code
         self.Fault_c1 = 0
 
-        self.leitura += 1  # atualiza numero da leitura
         
         return [self.v_vento, self.temp_1, self.umidade_higromet, self.temp_2, self.temp_higrometro, self.ref_cel_40,
                 self.testecel40, self.ref_cel_30, self.ref_cel_10, self.ref_40_temp, self.ref_30_temp, self.ref_10_temp,
@@ -119,7 +133,12 @@ class MyDataBank(DataBank):
 
     def update_values_periodically(self):
         while True:
-            self.update_values()
+            try:
+                self.update_values()
+            except Exception:
+                # Uma atualização que falha não pode matar a thread: mostra o erro e segue no próximo tick
+                print("Update failed; continuing on the next tick:")
+                print(traceback.format_exc())
             time.sleep(self.timer)
 
     # Função para retornar os valores dos registradores
