@@ -27,15 +27,22 @@ class Channel:
 
 @dataclass(frozen=True)
 class TimestampField:
-    """The Frame's own Timestamp register (seconds of day). Not a Channel."""
+    """The Frame's own Timestamp register. Not a Channel.
+
+    A register is unsigned 16-bit, and the seconds of the day go up to 86399, so the Simulator
+    stores them divided by `seconds_per_register` (2), rounded down: 0 to 43199. Decoding
+    multiplies back, giving seconds of day with at most `seconds_per_register - 1` s of error.
+    """
 
     address: int
-    scale: float
+    seconds_per_register: int
     label: str = "Timestamp"
-    unit: str = "s"
 
     def decode(self, raw):
-        return int(round(raw / self.scale))
+        return raw * self.seconds_per_register
+
+    def encode(self, seconds_of_day):
+        return seconds_of_day // self.seconds_per_register
 
 
 class RegisterBlock(NamedTuple):
@@ -74,7 +81,7 @@ CHANNELS = (
     Channel("Apparent Power", "Apparent Power", "kVA", 2),
 )
 
-TIMESTAMP = TimestampField(address=500, scale=1)
+TIMESTAMP = TimestampField(address=500, seconds_per_register=2)
 
 # The contiguous register ranges a Poll reads, one request each.
 BLOCKS = (

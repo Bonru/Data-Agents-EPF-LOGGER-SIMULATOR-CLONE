@@ -10,6 +10,11 @@ logging.basicConfig()
 logging.getLogger('pyModbusTCP.server').setLevel(logging.DEBUG)
 df = pd.read_excel('Datalogger_28_11_2024.xlsx')
 
+# Um registrador Modbus tem 16 bits sem sinal (máx. 65535), mas os segundos do dia chegam a 86399.
+# O registrador 500 (Timestamp) guarda os segundos do dia divididos por 2, arredondados para baixo
+# (0 a 43199; erro máximo de 1 s, dentro do tick de 2 s do Simulador). O Cliente multiplica por 2.
+TIMESTAMP_SECONDS_PER_REGISTER = 2
+
 class MyDataBank(DataBank):
     def __init__(self):
         super().__init__()
@@ -40,6 +45,12 @@ class MyDataBank(DataBank):
         """Converte uma string no modelo XX:XX:XX para um inteiro."""
         hora = value.split(':')
         return int(hora[0])*3600 + int(hora[1])*60 + int(hora[2])
+
+    # Função para codificar os segundos do dia no valor do registrador 500
+    def encode_timestamp(self, seconds_of_day):
+        """Segundos do dia -> valor do registrador 500 (cabe em 16 bits o dia inteiro)."""
+        return seconds_of_day // TIMESTAMP_SECONDS_PER_REGISTER
+
         
     # Função para retornar os novos valores da proxima consulta na planilha
     def new_values(self):
@@ -65,7 +76,7 @@ class MyDataBank(DataBank):
         self.ghi = abs(self.treat_data(parametros['ghi'])) # i = 16
         self.irradiance = abs(self.treat_data(parametros['Irradiance'])) # i = 17
         self.aparent_power = abs(self.treat_data(parametros['Apparent Power'])) # i = 18
-        self.timestamp = self.treat_timestamp(parametros['TIME']) # i = 19
+        self.timestamp = self.encode_timestamp(self.treat_timestamp(parametros['TIME'])) # i = 19 (valor do registrador 500)
 
         #Device Fault Code
         self.Fault_c1 = 0

@@ -108,7 +108,7 @@ def test_a_timestamp_register_above_65535_gives_a_partial_frame_with_no_error_an
     assert window.error_label.text() == ""
 
     # ...and nothing downstream turned the missing values into 0:
-    assert window.channel_cards.timestamp_card.label.text() == "Timestamp: — s"
+    assert window.channel_cards.timestamp_card.label.text() == "Timestamp: —"
     assert window.cards["teste_celula_40m"].label.text() == "Teste Cel 40: — °C"
     assert is_dimmed(window.cards["teste_celula_40m"])
     assert not is_dimmed(wind_card(window))
@@ -138,7 +138,7 @@ def test_once_the_timestamp_can_be_read_again_the_frame_is_complete(make_window,
 
     server.registers[500] = 1002
 
-    assert run_until(lambda: window.frames[-1].timestamp == 1002)
+    assert run_until(lambda: window.frames[-1].timestamp == 2004)  # register 1002, times two
     assert window.frames[-1].reading(TESTE_CELULA) == 7.0
 
 

@@ -66,7 +66,7 @@ def test_the_emitted_frame_holds_the_decoded_readings_and_timestamp():
     assert len(frames) == 1
     assert frames[0].reading(WIND) == 3.2
     assert frames[0].reading(HUMIDITY) == 41.5
-    assert frames[0].timestamp == 3725
+    assert frames[0].timestamp == 7450  # register 3725, times two
 
 
 def test_two_identical_consecutive_polls_emit_one_frame():
@@ -98,7 +98,7 @@ def test_a_changed_timestamp_alone_emits_a_new_frame():
     transport.registers[500] = 102
     worker.poll()
 
-    assert [frame.timestamp for frame in frames] == [100, 102]
+    assert [frame.timestamp for frame in frames] == [200, 204]  # registers 100 and 102, times two
 
 
 def test_a_timestamp_mismatch_triggers_exactly_one_retry_and_then_proceeds():
@@ -114,7 +114,7 @@ def test_a_timestamp_mismatch_triggers_exactly_one_retry_and_then_proceeds():
     worker.poll()
 
     assert read_requests(transport) == ONE_ATTEMPT + ONE_ATTEMPT  # the torn attempt, then one retry
-    assert [frame.timestamp for frame in frames] == [102]
+    assert [frame.timestamp for frame in frames] == [204]  # register 102, times two
 
 
 def test_a_mismatch_that_persists_after_the_retry_is_not_retried_again():
@@ -144,7 +144,7 @@ def test_a_failed_block_read_leaves_its_channels_without_a_reading_and_the_frame
     assert frames[0].reading(WIND) is None  # not 0
     assert frames[0].reading(HUMIDITY) is None
     assert frames[0].reading(GHI) == 50.0  # other blocks unaffected
-    assert frames[0].timestamp == 100
+    assert frames[0].timestamp == 200  # register 100, times two
 
 
 def test_a_failed_timestamp_block_gives_a_partial_frame_with_no_timestamp_and_no_zero():
@@ -173,7 +173,7 @@ def test_a_timestamp_read_that_fails_only_once_counts_as_a_mismatch():
     worker.poll()
 
     assert len(read_requests(transport)) == 12  # torn first attempt, then one retry
-    assert frames[0].timestamp == 100
+    assert frames[0].timestamp == 200  # register 100, times two
 
 
 def test_a_poll_where_every_block_fails_emits_no_frame():

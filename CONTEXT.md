@@ -9,7 +9,7 @@ The real physical device installed at the solarimetric station (e.g. the EMS4-GD
 _Avoid_: Simulator (that's this repo's own server, not the hardware)
 
 **Simulator**:
-This repository's Modbus TCP server (`Pymodbus_Server.py`), which mimics the Datalogger's register responses for testing, advancing one Frame per tick from the source spreadsheet. It stores each value in one ×10 integer register (the Timestamp and the Fault code unscaled), unlike the real Datalogger, which serves 32-bit floats over two registers.
+This repository's Modbus TCP server (`Pymodbus_Server.py`), which mimics the Datalogger's register responses for testing, advancing one Frame per tick from the source spreadsheet. It stores each value in one ×10 integer register (the Fault code unscaled, and the Timestamp as the seconds of day divided by 2), unlike the real Datalogger, which serves 32-bit floats over two registers.
 _Avoid_: Datalogger, Server
 
 **Station**:
@@ -42,6 +42,9 @@ _Avoid_: spreadsheet column names (`ref_cel_40`), client display labels (`"Ref C
 **Frame**:
 One full sample across every Channel, captured at a single instant — equivalent to one row of the source spreadsheet. The Simulator advances one Frame per tick.
 _Avoid_: "leitura" / "reading" for this — reserved for a single Channel's value (see Reading). Code still uses `leitura`/`n_leitura` for this internally; known naming drift, not yet renamed.
+
+**Timestamp**:
+The Frame's own time of day, in seconds of day (shown as `hh:mm:ss`); not a Channel, and it cannot be overridden. A Modbus register is unsigned 16-bit (maximum 65535) but a day has up to 86399 seconds, so register 500 holds the seconds of day divided by 2, rounded down (0 to 43199), and the Client multiplies it by 2 again. The result is accurate to within 1 s, less than the Simulator's 2 s tick: a spreadsheet time of `05:31:11` is shown as `05:31:10`, and `23:59:59` as `23:59:58`. This is an encoding chosen for this Simulator; the manual does not document register 500.
 
 **Reading**:
 The value of one Channel within a Frame.
@@ -111,6 +114,6 @@ _(Timestamp isn't a measured Channel — it's the Frame's own timestamp field.)_
 
 ## Open questions
 
-- **What the Datalogger's manual documents** (read): only registers 224-286 and 384-392 (the measurements) and 406-414 (accumulated irradiation), each as a 32-bit float over two registers, big-endian. It does **not** document registers 1, 2, 500, 501 or 5054, so their meaning, and the meaning of non-zero Fault codes, remains unconfirmed. This Simulator deliberately uses one ×10 integer register per value (the Timestamp and the Fault code unscaled) instead of the device's 32-bit floats, and that is not to be changed. The Fault code being an unscaled integer is a decision, not something the manual states.
+- **What the Datalogger's manual documents** (read): only registers 224-286 and 384-392 (the measurements) and 406-414 (accumulated irradiation), each as a 32-bit float over two registers, big-endian. It does **not** document registers 1, 2, 500, 501 or 5054, so their meaning, and the meaning of non-zero Fault codes, remains unconfirmed. This Simulator deliberately uses one ×10 integer register per value (the Fault code unscaled, and the Timestamp as the seconds of day divided by 2) instead of the device's 32-bit floats, and that is not to be changed. The Fault code being an unscaled integer is a decision, not something the manual states.
 
 - **Irradiance / Apparent Power source** (unconfirmed): tentatively assumed to come from separate equipment beyond the core weather Sensors — a reference pyranometer for Irradiance, an inverter or power meter for Apparent Power — which would extend Station to include electrical-side equipment. The manual has been read and does not document registers 1 and 2 (Irradiance, Apparent Power), so it neither confirms nor contradicts this.

@@ -49,7 +49,7 @@ class FakeTransport:
 
 
 class TickingFakeTransport(FakeTransport):
-    """A FakeTransport whose Timestamp advances by 2 s at the start of every Poll, like the Simulator.
+    """A FakeTransport whose Timestamp register advances by 2 (4 s of day) at the start of every Poll, like the Simulator.
 
     A Poll starts with a read of the Timestamp block, and the previous Poll ended with one, so
     two Timestamp-block reads in a row mean a new Poll began. The Timestamp never moves inside a Poll.

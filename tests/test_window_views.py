@@ -20,7 +20,11 @@ def test_the_cards_follow_the_frames_the_simulator_produces(window):
     timestamp_card = window.channel_cards.timestamp_card
 
     def timestamp_shown():
+        """The card's time of day in seconds, or -1 until the first Frame arrives."""
         shown = timestamp_card.label.text().split()[1]
-        return -1 if shown == "—" else int(shown)  # "—" until the first Frame arrives
+        if shown == "—":
+            return -1
+        hours, minutes, seconds = (int(part) for part in shown.split(":"))
+        return hours * 3600 + minutes * 60 + seconds
 
-    assert run_until(lambda: timestamp_shown() >= 4)  # the Simulator advances 2 s per Frame
+    assert run_until(lambda: timestamp_shown() >= 8)  # the fake Simulator advances the register by 2 (4 s) per Frame

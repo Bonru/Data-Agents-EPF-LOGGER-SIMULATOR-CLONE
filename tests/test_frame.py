@@ -80,7 +80,7 @@ def test_decode_frame_applies_each_channels_scale_and_the_timestamp_scale():
 
     assert frame.reading(CHANNELS[0]) == 1.0
     assert frame.reading(CHANNELS[19]) == 20.0
-    assert frame.timestamp == 3725
+    assert frame.timestamp == 7450  # the register holds half the seconds of day
     assert frame.received_at == 7.0
 
 

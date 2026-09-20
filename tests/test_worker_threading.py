@@ -60,7 +60,7 @@ def test_cards_show_the_polled_values(make_window):
     window = make_window(transport)
     assert run_until(lambda: window.cards["velocidade_vento"].label.text().startswith("Vel. vento: 3.2"))
     assert window.cards["temperatura_modulo_1"].label.text() == "Temperatura 1: 25.1 °C"
-    assert window.channel_cards.timestamp_card.label.text() == "Timestamp: 3725 s"
+    assert window.channel_cards.timestamp_card.label.text() == "Timestamp: 02:04:10"  # register 3725 = 7450 s
 
 
 def test_the_window_starts_without_a_simulator_and_shows_no_reading_rather_than_zero(make_window):

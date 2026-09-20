@@ -2,6 +2,7 @@ from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
 from PyQt6.QtWidgets import QGridLayout, QLabel, QSizePolicy, QWidget
 
+from ..core.frame_history import seconds_to_hms
 from ..core.registry import CHANNELS, TIMESTAMP
 from .layout import CARD_MIN_SIZE, CARD_POINT_SIZE
 
@@ -14,10 +15,11 @@ OVERRIDDEN_BORDER = "2px solid #e69500"
 
 
 class ChannelCard(QWidget):
-    def __init__(self, label, unit):
+    def __init__(self, label, unit, formatter=None):
         super().__init__()
         self._label = label
         self._unit = unit
+        self._formatter = formatter  # how a value is written; None writes it as it is
         self._missing = True  # no Reading yet
         self._dimmed = False  # the connection is not Connected
         self.setMinimumSize(*CARD_MIN_SIZE)
@@ -39,8 +41,9 @@ class ChannelCard(QWidget):
     def show_value(self, value):
         """Show a Reading, or "—" (dimmed) if there is none."""
         self._missing = value is None
-        shown = NO_READING if self._missing else value
-        self.label.setText(f"{self._label}: {shown} {self._unit}")
+        shown = NO_READING if self._missing else (self._formatter(value) if self._formatter else value)
+        text = f"{self._label}: {shown}"
+        self.label.setText(f"{text} {self._unit}" if self._unit else text)
         self._refresh_color()
 
     def set_dimmed(self, dimmed):
@@ -62,7 +65,7 @@ class ChannelCards:
 
     def __init__(self):
         self.cards = {channel.name: ChannelCard(channel.label, channel.unit) for channel in CHANNELS}
-        self.timestamp_card = ChannelCard(TIMESTAMP.label, TIMESTAMP.unit)
+        self.timestamp_card = ChannelCard(TIMESTAMP.label, "", formatter=seconds_to_hms)  # a time of day, hh:mm:ss
 
     def show_frame(self, frame):
         for channel in CHANNELS:

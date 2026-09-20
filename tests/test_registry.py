@@ -54,10 +54,10 @@ def test_the_timestamp_is_not_a_channel():
     assert all(channel.name != "Timestamp" and channel.label != "Timestamp" for channel in CHANNELS)
 
 
-def test_the_scales_are_ten_for_measurements_and_one_for_the_fault_code_and_the_timestamp():
+def test_the_scales_are_ten_for_measurements_and_one_for_the_fault_code():
     assert {channel.scale for channel in CHANNELS if channel.name != "fault_code"} == {10}
     assert channel_named("fault_code").scale == 1  # a protocol value, an unscaled integer
-    assert TIMESTAMP.scale == 1
+    assert TIMESTAMP.seconds_per_register == 2  # its register holds half the seconds of day
 
 
 def test_channel_decoding_and_encoding_use_the_scale():
@@ -68,7 +68,7 @@ def test_channel_decoding_and_encoding_use_the_scale():
 
 
 def test_the_timestamp_decodes_to_seconds_of_day():
-    assert TIMESTAMP.decode(3725) == 3725
+    assert TIMESTAMP.decode(3725) == 7450  # the register holds the seconds of day divided by two
 
 
 def test_every_channel_is_overridable():
