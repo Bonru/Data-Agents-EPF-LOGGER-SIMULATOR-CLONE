@@ -93,3 +93,28 @@ def test_the_ui_recovers_when_a_late_simulator_appears(qapp):
 
         assert run_until(lambda: window.cards["velocidade_vento"].label.text() == "Vel. vento: 3.2 m/s", timeout_ms=4000)
         window.close()
+
+
+def test_the_ui_does_not_stall_with_six_or_more_charts_visible_while_frames_arrive(qapp):
+    with FakeModbusServer() as server:
+        server.run_simulator({224: 32, 226: 251, 500: 1000}, interval=0.5)  # a new Frame every 0.5 s, four times the real pace
+        transport = ModbusTcpTransport("127.0.0.1", server.port, timeout=0.5)
+        window = MainWindow(transport, poll_interval_ms=100, submit_firebase=lambda payload: None)
+        window.show()
+        run_for(500)
+        window.toggle_view()  # the chart view: charts inside the viewport are drawn on every Frame
+        run_for(300)
+        visible = [chart for chart in window.charts.values() if window.is_in_viewport(chart.canvas)]
+        assert len(visible) >= 6
+        frames_before = window.history.version
+        heartbeat = Heartbeat(interval_ms=20)
+        heartbeat.start()
+        run_for(MEASURE_MS)
+        heartbeat.stop()
+        frames_seen = window.history.version - frames_before
+        drawn_current = all(not chart.needs_redraw(window.history) for chart in visible)
+        window.close()
+
+    assert frames_seen >= 3  # charts really were redrawn during the measurement
+    assert drawn_current
+    assert heartbeat.max_gap_ms < MAX_STALL_MS

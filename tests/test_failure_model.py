@@ -110,9 +110,8 @@ def test_a_timestamp_register_above_65535_gives_a_partial_frame_with_no_error_an
     assert window.cards["teste_celula_40m"].label.text() == "Teste Cel 40: — °C"
     assert is_dimmed(window.cards["teste_celula_40m"])
     assert not is_dimmed(wind_card(window))
-    history = window.adapter.chart_history
-    assert history.values["teste_celula_40m"][-1] is None
-    assert history.timestamps[-1] == time.strftime("%H:%M:%S", time.localtime(frame.received_at))  # receive time stands in
+    assert window.history.readings(TESTE_CELULA)[-1] is None
+    assert window.history.time_labels()[-1] == time.strftime("%H:%M:%S", time.localtime(frame.received_at))  # receive time stands in
     by_name = {item["name"]: item["value"] for item in payloads[-1]}
     assert by_name["Teste Cel 40"] is None
     assert by_name["Vel. vento"] == 3.2
@@ -123,9 +122,10 @@ def test_the_chart_shows_a_missing_reading_as_a_gap_not_as_zero(make_window, ser
     window = make_window()
     assert run_until(lambda: window.frames)
 
-    window.toggle_view()  # draws every chart, straight from the history
+    chart = window.charts["teste_celula_40m"]
+    chart.redraw(window.history)  # straight from the history
 
-    line = window.graphs["teste_celula_40m"].figure.axes[0].lines[0]
+    line = chart.axes.lines[0]
     assert all(math.isnan(value) for value in line.get_ydata())
 
 

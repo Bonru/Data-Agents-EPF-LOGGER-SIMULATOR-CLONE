@@ -1,20 +1,21 @@
 from PyQt6.QtWidgets import QApplication, QMainWindow, QWidget, QGridLayout, QLabel, QPushButton, QVBoxLayout, QLineEdit, QScrollArea
 from PyQt6.QtGui import QColor, QFont
-from PyQt6.QtCore import Qt, QThread, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QPoint, QRect, Qt, QThread, QTimer, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QPalette
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 
 from ..core.connection_state import ConnectionState
+from ..core.frame_history import FrameHistory
 from ..core.registry import CHANNELS
 from ..io_layer.transport import ModbusTcpTransport
 from ..io_layer.worker import ModbusWorker
 from .adapter import CompatibilityAdapter, submit_to_firebase
 from .cards import ChannelCards
+from .charts import ChannelChart
 from .override_field import OverrideField
 from .status import StatusArea
 
 WORKER_STOP_WAIT_MS = 3000
+CHARTS_PER_PASS = 1  # a chart takes ~10-15 ms to draw; one per event-loop pass keeps the UI answering
 
 
 class MainWindow(QMainWindow):
@@ -175,36 +176,39 @@ class MainWindow(QMainWindow):
         layout.addWidget(scroll_area_sidebar, 1, 0, 1, 1)
 
         # Área de rolagem para os gráficos e cartões
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
         scroll_content = QWidget()
         scroll_layout = QGridLayout(scroll_content)
         scroll_layout.setSpacing(20)
 
         self.channel_cards = ChannelCards((int(width * 0.28), int(height * 0.1)))
         self.cards = self.channel_cards.cards  # Channel name -> card
-        self.graphs = {}  # Channel name -> chart canvas
+        self.charts = {}  # Channel name -> its chart
 
         # Preenchendo a grade com os cartões e os gráficos
         for index, channel in enumerate(CHANNELS):
             row, col = divmod(index, 3)
-            # Widget para gráfico com canvas do matplotlib
-            graph_canvas = FigureCanvas(plt.Figure(figsize=(5, 4)))
-            graph_canvas.setFixedSize(int(width * 0.3), int(height * 0.25))
-            self.graphs[channel.name] = graph_canvas
+            # Gráfico do matplotlib: a figura e a linha são criadas uma única vez
+            chart = ChannelChart(channel)
+            chart.canvas.setFixedSize(int(width * 0.3), int(height * 0.25))
+            self.charts[channel.name] = chart
 
             # Adicionar widgets ao grid
             scroll_layout.addWidget(self.cards[channel.name], row, col)
-            scroll_layout.addWidget(graph_canvas, row, col)
-            graph_canvas.hide()  # Ocultar gráficos inicialmente
+            scroll_layout.addWidget(chart.canvas, row, col)
+            chart.canvas.hide()  # Ocultar gráficos inicialmente
 
         # O cartão do Timestamp do Frame ocupa a próxima célula (não tem gráfico)
         row, col = divmod(len(CHANNELS), 3)
         scroll_layout.addWidget(self.channel_cards.timestamp_card, row, col)
 
         scroll_content.setLayout(scroll_layout)
-        scroll_area.setWidget(scroll_content)
-        layout.addWidget(scroll_area, 1, 1, 1, 1)
+        self.scroll_area.setWidget(scroll_content)
+        layout.addWidget(self.scroll_area, 1, 1, 1, 1)
+        # Um gráfico que entra na área visível ao rolar é desenhado
+        self.scroll_area.verticalScrollBar().valueChanged.connect(lambda _value: self.draw_visible_charts())
+        self.scroll_area.horizontalScrollBar().valueChanged.connect(lambda _value: self.draw_visible_charts())
 
         # Fundo claro
         self.setAutoFillBackground(True)
@@ -217,6 +221,7 @@ class MainWindow(QMainWindow):
         self.error_label.setStyleSheet("color: red;")
         layout.addWidget(self.error_label, 2, 1, 1, 1)
 
+        self.history = FrameHistory()  # os últimos Frames, para os gráficos
         self.adapter = CompatibilityAdapter(submit_firebase)
         self.on_connection_state(ConnectionState.DISCONNECTED)  # until the first Frame arrives
 
@@ -240,9 +245,9 @@ class MainWindow(QMainWindow):
     @pyqtSlot(object)
     def on_frame(self, frame):
         self.channel_cards.show_frame(frame)
+        self.history.append(frame)
         self.adapter.consume(frame)
-        if self.charts_visible:
-            self.redraw_charts()
+        self.draw_visible_charts()
         self.error_label.setText("")
 
     @pyqtSlot(object)
@@ -256,9 +261,29 @@ class MainWindow(QMainWindow):
         self.status_area.show_connection_state(state)
         self.channel_cards.set_dimmed(state != ConnectionState.CONNECTED)
 
-    def redraw_charts(self):
-        for channel in CHANNELS:
-            self.display_graph(self.graphs[channel.name], channel)
+    def draw_visible_charts(self):
+        """Draw the charts that are inside the scroll viewport and out of date.
+
+        Nothing is drawn in the data view. In the chart view this runs when a Frame arrives, when a
+        chart is scrolled into view and when the view is toggled; charts outside the viewport wait.
+        At most CHARTS_PER_PASS are drawn at a time; the rest follow on the next event-loop pass,
+        so drawing many charts never blocks the UI for long.
+        """
+        if not self.charts_visible:
+            return
+        stale = [
+            chart for chart in self.charts.values()
+            if chart.needs_redraw(self.history) and self.is_in_viewport(chart.canvas)
+        ]
+        for chart in stale[:CHARTS_PER_PASS]:
+            chart.redraw(self.history)
+        if len(stale) > CHARTS_PER_PASS:
+            QTimer.singleShot(0, self.draw_visible_charts)
+
+    def is_in_viewport(self, widget):
+        """Whether any part of the widget (inside the scroll area's content) can be seen."""
+        viewport = self.scroll_area.viewport()
+        return QRect(widget.mapTo(viewport, QPoint(0, 0)), widget.size()).intersects(viewport.rect())
 
     # Método para alternar entre exibição de dados e gráficos
     def toggle_view(self):
@@ -269,48 +294,17 @@ class MainWindow(QMainWindow):
             self.channel_cards.timestamp_card.hide()
             for channel in CHANNELS:
                 self.cards[channel.name].hide()
-                self.display_graph(self.graphs[channel.name], channel)
-                self.graphs[channel.name].show()
+                self.charts[channel.name].canvas.show()
+            # Qt places the charts (and sizes the scroll area) on the next event-loop pass; ask
+            # which are inside the viewport only after that, so it is answered from where they really are.
+            QTimer.singleShot(0, self.draw_visible_charts)
         else:
             # Oculta gráficos e exibe cartões
             self.config_button.setText("Exibir Gráfico")
             for channel in CHANNELS:
-                self.graphs[channel.name].hide()
+                self.charts[channel.name].canvas.hide()
                 self.cards[channel.name].show()
             self.channel_cards.timestamp_card.show()
-
-    # Método para exibir gráficos
-    def display_graph(self, graph_canvas, channel):
-        ax = graph_canvas.figure.subplots()
-        fig = graph_canvas.figure
-        ax.clear()
-
-        # Apaga a figura anterior
-        fig.clear()
-
-        # Cria um novo eixo pra figura
-        ax = fig.add_subplot(111)
-
-        # Gerar o gráfico
-        history = self.adapter.chart_history
-        x = history.timestamps
-        # Uma Reading ausente vira uma lacuna no gráfico, nunca um zero
-        y = [float("nan") if value is None else value for value in history.values[channel.name]]
-        ax.plot(x, y, marker='o')
-        ax.set_title(f"Gráfico de {channel.label}")
-        ax.set_xlabel("Tempo")
-
-        # Definir ticks do eixo x para mostrar apenas 5 valores igualmente espaçados
-        num_ticks = 4
-        if len(x) > num_ticks:
-            tick_positions = [x[i] for i in range(0, len(x), len(x) // num_ticks)]
-            ax.set_xticks(tick_positions)
-            ax.set_xticklabels([x[i] for i in range(0, len(x), len(x) // num_ticks)])
-        else:
-            ax.set_xticks(x)
-            ax.set_xticklabels(x)
-
-        graph_canvas.draw()
 
     def close_application(self):
         self.close()

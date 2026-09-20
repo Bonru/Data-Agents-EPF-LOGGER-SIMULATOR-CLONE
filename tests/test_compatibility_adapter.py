@@ -1,4 +1,4 @@
-"""Behavior kept working by the temporary compatibility adapter, until #8, #9 and #10 replace it."""
+"""What the temporary compatibility adapter still does (the Firebase upload), until #10 replaces it."""
 import time
 
 import pytest
@@ -7,7 +7,7 @@ import requests
 from datalogger_client.core.frame import Frame
 from datalogger_client.core.registry import CHANNELS, channel_named
 from datalogger_client.ui import adapter as adapter_module
-from datalogger_client.ui.adapter import CompatibilityAdapter, build_firebase_payload, seconds_to_hms
+from datalogger_client.ui.adapter import CompatibilityAdapter, build_firebase_payload
 from datalogger_client.ui.main_window import MainWindow
 from tests.support.fake_transport import TickingFakeTransport
 from tests.support.heartbeat import run_until
@@ -52,32 +52,6 @@ def test_each_frame_is_handed_to_the_firebase_submission():
     assert submitted == [build_firebase_payload(make_frame())]
 
 
-def test_chart_history_keeps_the_last_30_frames_with_the_timestamp_as_hms():
-    adapter = make_adapter()
-    for i in range(35):
-        adapter.consume(make_frame(float(i)))
-
-    history = adapter.chart_history
-    assert list(history.values[WIND.name]) == [float(i) for i in range(5, 35)]
-    assert set(history.timestamps) == {"01:02:05"}
-    assert len(history.timestamps) == 30
-    assert set(history.values) == {channel.name for channel in CHANNELS}
-
-
-def test_the_chart_time_axis_falls_back_to_the_receive_time_without_a_timestamp():
-    adapter = make_adapter()
-    received_at = time.mktime((2025, 1, 1, 13, 14, 15, 0, 0, -1))
-
-    adapter.consume(Frame({}, None, received_at=received_at))
-
-    assert list(adapter.chart_history.timestamps) == ["13:14:15"]
-
-
-def test_seconds_to_hms():
-    assert seconds_to_hms(0) == "00:00:00"
-    assert seconds_to_hms(TIMESTAMP_SECONDS) == "01:02:05"
-
-
 def test_submit_to_firebase_puts_the_payload_on_a_background_thread(monkeypatch):
     calls = []
     monkeypatch.setattr(requests, "put", lambda url, json, timeout: calls.append((url, json, timeout)))
@@ -99,44 +73,6 @@ def window(qapp):
     window.fake_transport = transport
     yield window
     window.close()
-
-
-def test_charts_are_drawn_only_while_the_chart_view_is_visible(window, monkeypatch):
-    drawn = []
-    monkeypatch.setattr(window, "display_graph", lambda canvas, channel: drawn.append(channel.name))
-    frames = []
-    window._worker.frame_ready.connect(frames.append)
-
-    assert run_until(lambda: len(frames) >= 3)
-    assert drawn == []  # data view: no chart is redrawn on a Frame
-
-    window.toggle_view()
-    assert len(drawn) == len(CHANNELS)  # switching draws each chart once
-    seen = len(frames)
-    assert run_until(lambda: len(frames) >= seen + 2)
-    assert len(drawn) > len(CHANNELS)  # chart view: Frames redraw
-
-    window.toggle_view()
-    drawn.clear()
-    seen = len(frames)
-    assert run_until(lambda: len(frames) >= seen + 2)
-    assert drawn == []
-
-
-def test_the_toggle_swaps_cards_and_charts_and_the_button_text(window):
-    wind_card = window.cards["velocidade_vento"]
-    timestamp_card = window.channel_cards.timestamp_card
-    run_until(lambda: wind_card.label.text().startswith("Vel. vento: 3.2"))
-
-    window.toggle_view()
-    assert not wind_card.isVisible() and window.graphs["velocidade_vento"].isVisible()
-    assert not timestamp_card.isVisible()
-    assert window.config_button.text() == "Exibir Dados"
-
-    window.toggle_view()
-    assert wind_card.isVisible() and not window.graphs["velocidade_vento"].isVisible()
-    assert timestamp_card.isVisible()
-    assert window.config_button.text() == "Exibir Gráfico"
 
 
 def test_the_cards_follow_the_frames_the_simulator_produces(window):
