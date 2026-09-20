@@ -25,6 +25,11 @@ def fault_entry(payload):
     return next(item for item in payload if item["name"] == "Fault_code")
 
 
+def frame_with_fault(raw):
+    """A Frame as the Client builds it from the registers, with this raw Fault code and 3.2 m/s of wind."""
+    return decode_frame({5054: raw, 224: 32}, received_at=0.0)
+
+
 # --- the registry ---------------------------------------------------------------------------------
 
 
@@ -47,7 +52,7 @@ def test_the_other_channels_are_still_read_as_tenths():
 
 
 def test_a_frame_built_from_registers_holds_the_fault_code_as_an_integer():
-    frame = decode_frame({5054: 3, 224: 32}, received_at=0.0)
+    frame = frame_with_fault(3)
 
     assert frame.reading(FAULT) == 3 and type(frame.reading(FAULT)) is int
     assert frame.reading(WIND) == 3.2
@@ -147,17 +152,13 @@ def test_a_non_zero_fault_code_is_displayed_as_is_not_divided_by_ten(make_window
 
 def test_the_payload_sends_an_integer_for_the_fault_code():
     for raw in (0, 3):
-        frame = decode_frame({5054: raw, 224: 32}, received_at=0.0)
-        payload = build_firebase_payload(frame)
+        payload = build_firebase_payload(frame_with_fault(raw))
 
         assert fault_entry(payload)["value"] == raw and type(fault_entry(payload)["value"]) is int
         assert next(i for i in payload if i["name"] == "Vel. vento")["value"] == 3.2
 
     assert '{"name": "Fault_code", "value": 0, "unit": " "}' in json.dumps(build_firebase_payload(frame_with_fault(0)))
 
-
-def frame_with_fault(raw):
-    return decode_frame({5054: raw, 224: 32}, received_at=0.0)
 
 
 # --- the sidebar ----------------------------------------------------------------------------------------
