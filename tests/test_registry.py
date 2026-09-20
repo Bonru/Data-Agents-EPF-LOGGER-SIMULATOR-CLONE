@@ -54,8 +54,9 @@ def test_the_timestamp_is_not_a_channel():
     assert all(channel.name != "Timestamp" and channel.label != "Timestamp" for channel in CHANNELS)
 
 
-def test_todays_scales_are_ten_for_measurements_and_one_for_the_timestamp():
-    assert {channel.scale for channel in CHANNELS} == {10}
+def test_the_scales_are_ten_for_measurements_and_one_for_the_fault_code_and_the_timestamp():
+    assert {channel.scale for channel in CHANNELS if channel.name != "fault_code"} == {10}
+    assert channel_named("fault_code").scale == 1  # a protocol value, an unscaled integer
     assert TIMESTAMP.scale == 1
 
 

@@ -9,11 +9,11 @@ The real physical device installed at the solarimetric station (e.g. the EMS4-GD
 _Avoid_: Simulator (that's this repo's own server, not the hardware)
 
 **Simulator**:
-This repository's Modbus TCP server (`Pymodbus_Server.py`), which mimics the Datalogger's register responses for testing, advancing one Frame per tick from the source spreadsheet.
+This repository's Modbus TCP server (`Pymodbus_Server.py`), which mimics the Datalogger's register responses for testing, advancing one Frame per tick from the source spreadsheet. It stores each value in one ×10 integer register (the Timestamp and the Fault code unscaled), unlike the real Datalogger, which serves 32-bit floats over two registers.
 _Avoid_: Datalogger, Server
 
 **Station**:
-The physical site as a whole: every Sensor plus the real Datalogger, and — tentatively, pending confirmation against the manual — electrical-side equipment feeding the Apparent Power Channel.
+The physical site as a whole: every Sensor plus the real Datalogger, and — tentatively; the manual does not document those registers — electrical-side equipment feeding the Apparent Power Channel.
 
 ## Sensors & Channels
 
@@ -53,7 +53,7 @@ A value the user types for a Channel in the PyQt UI ("Inserção manual") that r
 _Avoid_: "one-shot write" — an override is not applied once and forgotten.
 
 **Fault code**:
-A protocol value (register 5054) from the Datalogger's fault-reporting scheme: `0` means no fault, other values represent specific device faults per the Datalogger's manual. The Simulator always reports `0`; simulating real fault conditions is a known future gap, not yet implemented.
+A protocol value (register 5054): `0` means no fault. It is an **unscaled integer**: unlike every measurement, which the Simulator stores as value × 10, the Fault code is stored, read, overridden and displayed as the plain integer (`0`, never `0.0`; overriding it with `3` writes `3`, not `30`). The Simulator always reports `0`; simulating real fault conditions is a known future gap, not yet implemented. What a non-zero code means is unconfirmed: the Datalogger's manual does not document register 5054 (see Open questions).
 
 ## Client & connection
 
@@ -111,6 +111,6 @@ _(Timestamp isn't a measured Channel — it's the Frame's own timestamp field.)_
 
 ## Open questions
 
-- **Fault code scale** (unverified): the Client treats every register as ×10-scaled, including Fault code (register 5054), but Fault code is a protocol value and the Simulator writes it unscaled (`0`). A non-zero code would display wrongly (e.g. `3` reads as `0.3`). Check against the Datalogger's manual.
+- **What the Datalogger's manual documents** (read): only registers 224-286 and 384-392 (the measurements) and 406-414 (accumulated irradiation), each as a 32-bit float over two registers, big-endian. It does **not** document registers 1, 2, 500, 501 or 5054, so their meaning, and the meaning of non-zero Fault codes, remains unconfirmed. This Simulator deliberately uses one ×10 integer register per value (the Timestamp and the Fault code unscaled) instead of the device's 32-bit floats, and that is not to be changed. The Fault code being an unscaled integer is a decision, not something the manual states.
 
-- **Irradiance / Apparent Power source** (unconfirmed): tentatively assumed to come from separate equipment beyond the core weather Sensors — a reference pyranometer for Irradiance, an inverter or power meter for Apparent Power — which would extend Station to include electrical-side equipment. Not verified against the Datalogger's manual: the manual PDF couldn't be read in this environment (poppler-utils/`pdftoppm` isn't installed). Re-check when that's possible.
+- **Irradiance / Apparent Power source** (unconfirmed): tentatively assumed to come from separate equipment beyond the core weather Sensors — a reference pyranometer for Irradiance, an inverter or power meter for Apparent Power — which would extend Station to include electrical-side equipment. The manual has been read and does not document registers 1 and 2 (Irradiance, Apparent Power), so it neither confirms nor contradicts this.

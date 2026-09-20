@@ -2,6 +2,8 @@
 
 `scale` is what the Simulator multiplies a value by before storing it in the
 register: a Reading is `raw / scale`, and a value written back is `value * scale`.
+A Channel with scale 1 is a plain integer (the Fault code, a protocol value): its Reading is
+the raw integer itself, so it shows as `0`, never `0.0`.
 """
 from dataclasses import dataclass
 from typing import NamedTuple
@@ -17,7 +19,7 @@ class Channel:
     overridable: bool = True
 
     def decode(self, raw):
-        return raw / self.scale
+        return raw if self.scale == 1 else raw / self.scale
 
     def encode(self, value):
         return int(round(value * self.scale))
@@ -67,7 +69,7 @@ CHANNELS = (
     Channel("radiacao_solar_poa_ri1", "POA RI 1", "W/m²", 388),
     Channel("radiacao_solar_poa1", "POA 1", "W/m²", 386),
     Channel("radiacao_solar_ghi", "GHI", "W/m²", 384),
-    Channel("fault_code", "Fault_code", " ", 5054),
+    Channel("fault_code", "Fault_code", " ", 5054, scale=1),  # a protocol value, not a x10 measurement
     Channel("Irradiance", "Irradiance", "W/m²", 1),
     Channel("Apparent Power", "Apparent Power", "kVA", 2),
 )
