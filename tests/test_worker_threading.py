@@ -62,14 +62,19 @@ def test_cards_show_the_polled_values(make_window):
     assert window.channel_cards.timestamp_card.label.text() == "Timestamp: 3725 s"
 
 
-def test_the_window_starts_without_a_simulator_and_a_failed_read_becomes_zero(make_window):
+def test_the_window_starts_without_a_simulator_and_shows_no_reading_rather_than_zero(make_window):
     class DownTransport(FakeTransport):
         def read_holding_registers(self, address, count=1):
             self._record("read", address, count)
             return None
 
-    window = make_window(DownTransport())
-    assert run_until(lambda: window.cards["velocidade_vento"].label.text() == "Vel. vento: 0.0 m/s")
+    transport = DownTransport()
+    window = make_window(transport)
+    assert run_until(lambda: len(transport.calls_named("read")) >= READS_PER_POLL)
+    run_for(100)
+
+    assert window.cards["velocidade_vento"].label.text() == "Vel. vento: — m/s"
+    assert window.status_area.connection_label.text() == "Desconectado"
 
 
 def test_closing_the_window_stops_the_worker_thread_cleanly(make_window):

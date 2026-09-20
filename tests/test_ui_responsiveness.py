@@ -51,6 +51,13 @@ def test_a_slow_simulator_does_not_stall_the_ui(qapp):
     assert max_gap < MAX_STALL_MS
 
 
+def test_a_simulator_that_drops_every_request_does_not_stall_the_ui(qapp):
+    with FakeModbusServer({224: 32}) as server:
+        server.mode = "drop"
+        max_gap, _ = measure_stall_ms(qapp, server.port)
+    assert max_gap < MAX_STALL_MS
+
+
 def test_an_absent_simulator_does_not_stall_the_ui(qapp):
     max_gap, _ = measure_stall_ms(qapp, free_port_with_nothing_listening())
     assert max_gap < MAX_STALL_MS
@@ -80,7 +87,7 @@ def test_the_ui_recovers_when_a_late_simulator_appears(qapp):
         window = MainWindow(transport, poll_interval_ms=100, submit_firebase=lambda payload: None)
         window.show()
         run_for(600)
-        assert window.cards["velocidade_vento"].label.text().startswith(f"{CHANNELS[0].label}: --")
+        assert window.cards["velocidade_vento"].label.text().startswith(f"{CHANNELS[0].label}: —")
 
         server.mode = "normal"
 

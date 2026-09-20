@@ -1,8 +1,7 @@
-"""What one Poll reads and when it emits a Frame. The worker's poll() is called directly on the
-test thread with a fake transport, so no event loop is needed."""
-import pytest
-
-from datalogger_client.core.registry import channel_named
+"""What one Poll reads, when it emits a Frame, and how it reports failures. The worker's poll() is
+called directly on the test thread with a fake transport and a fake clock, so no event loop is needed."""
+from datalogger_client.core.connection_state import ConnectionState
+from datalogger_client.core.registry import BLOCKS, channel_named
 from datalogger_client.io_layer.worker import ModbusWorker
 from tests.support.fake_transport import FakeTransport
 
@@ -11,13 +10,33 @@ ONE_ATTEMPT = FIRST_BLOCK_ORDER + [(500, 2)]  # the five blocks, then the Timest
 
 WIND = channel_named("velocidade_vento")
 HUMIDITY = channel_named("umidade_ar")
+GHI = channel_named("radiacao_solar_ghi")
+TESTE_CELULA = channel_named("teste_celula_40m")  # register 501, in the same block as the Timestamp
+ALL_BLOCK_STARTS = {block.start for block in BLOCKS}
 
 
-def make_worker(transport):
-    worker = ModbusWorker(transport)
+class FakeClock:
+    def __init__(self):
+        self.now = 1000.0
+
+    def __call__(self):
+        return self.now
+
+    def advance(self, seconds):
+        self.now += seconds
+
+
+def make_worker(transport, clock=None):
+    worker = ModbusWorker(transport, clock=clock or FakeClock())
     frames = []
     worker.frame_ready.connect(frames.append)
     return worker, frames
+
+
+def watch_states(worker):
+    states = []
+    worker.connection_state_changed.connect(states.append)
+    return states
 
 
 def read_requests(transport):
@@ -112,18 +131,81 @@ def test_a_mismatch_that_persists_after_the_retry_is_not_retried_again():
     assert len(frames) == 1  # and then it proceeds with what it has
 
 
-def test_a_failed_block_read_makes_its_values_zero_for_now():
+# --- Failure model: partial Frames -------------------------------------------------------------
+
+
+def test_a_failed_block_read_leaves_its_channels_without_a_reading_and_the_frame_is_still_emitted():
     transport = FakeTransport({224: 32, 228: 415, 384: 500, 500: 100}, failing_addresses={224})
     worker, frames = make_worker(transport)
 
     worker.poll()
 
-    assert frames[0].reading(WIND) == 0.0
-    assert frames[0].reading(HUMIDITY) == 0.0
-    assert frames[0].reading(channel_named("radiacao_solar_ghi")) == 50.0  # other blocks unaffected
+    assert len(frames) == 1
+    assert frames[0].reading(WIND) is None  # not 0
+    assert frames[0].reading(HUMIDITY) is None
+    assert frames[0].reading(GHI) == 50.0  # other blocks unaffected
+    assert frames[0].timestamp == 100
 
 
-def test_a_poll_that_raises_emits_nothing_and_does_not_propagate():
+def test_a_failed_timestamp_block_gives_a_partial_frame_with_no_timestamp_and_no_zero():
+    transport = FakeTransport({224: 32, 500: 100, 501: 70}, failing_addresses={500})
+    worker, frames = make_worker(transport)
+
+    worker.poll()
+
+    assert len(frames) == 1
+    assert frames[0].timestamp is None  # not 0
+    assert frames[0].reading(TESTE_CELULA) is None  # same block as the Timestamp
+    assert frames[0].reading(WIND) == 3.2
+    assert len(read_requests(transport)) == 6  # both Timestamp reads failed alike: no mismatch, no retry
+
+
+def test_a_timestamp_read_that_fails_only_once_counts_as_a_mismatch():
+    def fail_only_the_first_timestamp_read(transport, address, count):
+        transport.failing_addresses = {500} if address == 500 and not transport.failed_once else set()
+        if address == 500:
+            transport.failed_once = True
+
+    transport = FakeTransport({500: 100}, on_read=fail_only_the_first_timestamp_read)
+    transport.failed_once = False
+    worker, frames = make_worker(transport)
+
+    worker.poll()
+
+    assert len(read_requests(transport)) == 12  # torn first attempt, then one retry
+    assert frames[0].timestamp == 100
+
+
+def test_a_poll_where_every_block_fails_emits_no_frame():
+    transport = FakeTransport({224: 32}, failing_addresses=ALL_BLOCK_STARTS)
+    worker, frames = make_worker(transport)
+
+    worker.poll()
+
+    assert frames == []
+
+
+def test_a_poll_gives_up_after_two_failed_block_reads_in_a_row_instead_of_waiting_out_every_block():
+    transport = FakeTransport({224: 32}, failing_addresses=ALL_BLOCK_STARTS)
+    worker, frames = make_worker(transport)
+
+    worker.poll()
+
+    assert read_requests(transport) == FIRST_BLOCK_ORDER[:2]  # the Timestamp block, then the next: both failed
+    assert frames == []
+
+
+def test_two_failed_blocks_that_are_not_in_a_row_do_not_end_the_poll():
+    transport = FakeTransport({224: 32, 500: 100}, failing_addresses={500, 5054})
+    worker, frames = make_worker(transport)
+
+    worker.poll()
+
+    assert len(read_requests(transport)) == 6  # every block was still tried
+    assert frames[0].reading(WIND) == 3.2
+
+
+def test_a_poll_where_the_transport_raises_counts_as_no_response():
     class Broken(FakeTransport):
         def read_holding_registers(self, address, count=1):
             raise OSError("boom")
@@ -133,3 +215,111 @@ def test_a_poll_that_raises_emits_nothing_and_does_not_propagate():
     worker.poll()
 
     assert frames == []
+
+
+# --- Failure model: Connection state and reconnect backoff --------------------------------------
+
+
+def test_the_first_answered_poll_makes_the_state_connected():
+    worker, _ = make_worker(FakeTransport({500: 100}))
+    states = watch_states(worker)
+
+    worker.poll()
+
+    assert states == [ConnectionState.CONNECTED]
+
+
+def test_two_failed_polls_make_the_state_disconnected_and_a_partial_poll_does_not():
+    clock = FakeClock()
+    transport = FakeTransport({500: 100})
+    worker, _ = make_worker(transport, clock)
+    states = watch_states(worker)
+    worker.poll()
+    transport.failing_addresses = {224}  # a partial Poll is still a usable response
+    worker.poll()
+    assert states == [ConnectionState.CONNECTED]
+
+    transport.failing_addresses = ALL_BLOCK_STARTS
+    worker.poll()  # first failed Poll
+    clock.advance(1.0)
+    worker.poll()  # second failed Poll, after the backoff
+
+    assert states == [ConnectionState.CONNECTED, ConnectionState.DISCONNECTED]
+
+
+def test_after_a_failed_poll_the_worker_waits_out_the_backoff_before_trying_again():
+    clock = FakeClock()
+    transport = FakeTransport(failing_addresses=ALL_BLOCK_STARTS)
+    worker, _ = make_worker(transport, clock)
+
+    worker.poll()
+    reads_per_poll = len(read_requests(transport))
+    clock.advance(0.9)
+    worker.poll()
+    assert len(read_requests(transport)) == reads_per_poll  # still backing off (1 s)
+
+    clock.advance(0.2)
+    worker.poll()
+    assert len(read_requests(transport)) == 2 * reads_per_poll  # 1 s passed: reconnect attempt
+
+    clock.advance(1.9)
+    worker.poll()
+    assert len(read_requests(transport)) == 2 * reads_per_poll  # the next wait is 2 s
+    clock.advance(0.2)
+    worker.poll()
+    assert len(read_requests(transport)) == 3 * reads_per_poll
+
+
+def test_the_backoff_starts_over_once_the_simulator_answers_again():
+    clock = FakeClock()
+    transport = FakeTransport({500: 100}, failing_addresses=ALL_BLOCK_STARTS)
+    worker, frames = make_worker(transport, clock)
+    states = watch_states(worker)
+    for _ in range(3):  # three failed Polls push the wait to 4 s
+        worker.poll()
+        clock.advance(6.0)
+    transport.failing_addresses = set()
+
+    worker.poll()  # answered: the Simulator is back
+    transport.failing_addresses = ALL_BLOCK_STARTS
+    worker.poll()  # fails again
+    reads = len(read_requests(transport))
+    clock.advance(1.1)
+    worker.poll()
+
+    assert len(frames) == 1
+    assert len(read_requests(transport)) > reads  # the wait is 1 s again, not 4 or 8
+    assert states == [ConnectionState.CONNECTED, ConnectionState.DISCONNECTED]  # that retry was the second failure
+
+
+def test_an_answering_simulator_that_stops_changing_goes_stale_and_a_change_reconnects_it():
+    clock = FakeClock()
+    transport = FakeTransport({224: 32, 500: 100})
+    worker, _ = make_worker(transport, clock)
+    states = watch_states(worker)
+    worker.poll()
+
+    clock.advance(6.5)
+    worker.poll()  # answered, identical Frame: nothing new for more than 6 s
+    transport.registers[224] = 40
+    clock.advance(0.5)
+    worker.poll()
+
+    assert states == [ConnectionState.CONNECTED, ConnectionState.STALE, ConnectionState.CONNECTED]
+
+
+def test_the_state_goes_stale_by_time_even_while_the_worker_is_backing_off():
+    clock = FakeClock()
+    transport = FakeTransport({500: 100})
+    worker, _ = make_worker(transport, clock)
+    states = watch_states(worker)
+    worker.poll()
+    transport.failing_addresses = ALL_BLOCK_STARTS
+    clock.advance(5.5)
+    worker.poll()  # first failure: a 1 s backoff starts
+    clock.advance(0.5)
+    worker.poll()  # skipped (backing off); 6.0+ s since the last new Frame
+    clock.advance(0.1)
+    worker.poll()  # skipped again, now past 6 s
+
+    assert states == [ConnectionState.CONNECTED, ConnectionState.STALE]

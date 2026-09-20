@@ -2,9 +2,14 @@
 
 Supports function 3 (read holding registers) and 6 (write single register).
 `mode` switches how it answers: "normal", "slow" (waits `delay` seconds before
-each reply) or "hang" (reads requests and never answers). `drop_connections()`
-closes every open client connection; `stop()` shuts the server down entirely,
+each reply), "hang" (reads requests and never answers) or "drop" (closes every
+connection as soon as a request arrives, so every request fails). `drop_connections()`
+closes every open client connection once; `stop()` shuts the server down entirely,
 which makes the port refuse connections.
+
+A read that covers a register whose value does not fit in 16 bits (like the real
+Simulator's Timestamp after about 13 minutes) makes the server drop the connection,
+as the real pyModbusTCP server does; the client reconnects on its next request.
 """
 import socket
 import struct
@@ -67,6 +72,8 @@ class FakeModbusServer:
                 if not self._wait_before_reply():
                     return
                 reply = self._handle(pdu)
+                if reply is None:
+                    return  # no reply: the connection is closed below
                 connection.sendall(struct.pack(">HHHB", transaction, protocol, len(reply) + 1, unit) + reply)
         except (OSError, ConnectionError):
             pass
@@ -74,7 +81,9 @@ class FakeModbusServer:
             _close_quietly(connection)
 
     def _wait_before_reply(self):
-        """Returns False if the server was stopped while it waited."""
+        """Returns False if the connection should be closed without a reply (server stopped, or "drop" mode)."""
+        if self.mode == "drop":
+            return False
         if self.mode == "hang":
             while self.mode == "hang":
                 if self._stopping.wait(0.05):
@@ -87,8 +96,11 @@ class FakeModbusServer:
         function = pdu[0]
         if function == 3:
             address, count = struct.unpack(">HH", pdu[1:5])
-            values = b"".join(struct.pack(">H", self.registers.get(address + i, 0)) for i in range(count))
-            return bytes([3, len(values)]) + values
+            values = [self.registers.get(address + i, 0) for i in range(count)]
+            if any(not 0 <= value <= 0xFFFF for value in values):
+                return None
+            packed = b"".join(struct.pack(">H", value) for value in values)
+            return bytes([3, len(packed)]) + packed
         if function == 6:
             address, value = struct.unpack(">HH", pdu[1:5])
             self.registers[address] = value

@@ -4,7 +4,9 @@ from PyQt6.QtWidgets import QGridLayout, QLabel, QWidget
 
 from ..core.registry import CHANNELS, TIMESTAMP
 
-NO_READING = "--"
+NO_READING = "—"
+TEXT_COLOR = "#333333"
+DIMMED_TEXT_COLOR = "#a8a8a8"
 
 
 class ChannelCard(QWidget):
@@ -12,12 +14,13 @@ class ChannelCard(QWidget):
         super().__init__()
         self._label = label
         self._unit = unit
+        self._missing = True  # no Reading yet
+        self._dimmed = False  # the connection is not Connected
         self.setFixedSize(*size)
         self.setStyleSheet("background-color: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 10px;")
 
         self.label = QLabel()
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.label.setStyleSheet("color: #333333;")
         font = QFont()
         font.setPixelSize(22)
         self.label.setFont(font)
@@ -28,8 +31,20 @@ class ChannelCard(QWidget):
         self.show_value(None)
 
     def show_value(self, value):
-        shown = NO_READING if value is None else value
+        """Show a Reading, or "—" (dimmed) if there is none."""
+        self._missing = value is None
+        shown = NO_READING if self._missing else value
         self.label.setText(f"{self._label}: {shown} {self._unit}")
+        self._refresh_color()
+
+    def set_dimmed(self, dimmed):
+        """Dim the whole card while the connection is not Connected; the last good value stays visible."""
+        self._dimmed = dimmed
+        self._refresh_color()
+
+    def _refresh_color(self):
+        dim = self._missing or self._dimmed
+        self.label.setStyleSheet(f"color: {DIMMED_TEXT_COLOR if dim else TEXT_COLOR};")
 
 
 class ChannelCards:
@@ -43,3 +58,7 @@ class ChannelCards:
         for channel in CHANNELS:
             self.cards[channel.name].show_value(frame.reading(channel))
         self.timestamp_card.show_value(frame.timestamp)
+
+    def set_dimmed(self, dimmed):
+        for card in (*self.cards.values(), self.timestamp_card):
+            card.set_dimmed(dimmed)

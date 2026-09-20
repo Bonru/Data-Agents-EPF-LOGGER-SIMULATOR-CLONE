@@ -6,11 +6,13 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from PyQt6.QtGui import QIntValidator
 
+from ..core.connection_state import ConnectionState
 from ..core.registry import CHANNELS
 from ..io_layer.transport import ModbusTcpTransport
 from ..io_layer.worker import ModbusWorker
 from .adapter import CompatibilityAdapter, submit_to_firebase
 from .cards import ChannelCards
+from .status import StatusArea
 
 WORKER_STOP_WAIT_MS = 3000
 
@@ -20,7 +22,8 @@ class MainWindow(QMainWindow):
     write_requested = pyqtSignal(int, int)
     stop_requested = pyqtSignal()
 
-    def __init__(self, transport=None, poll_interval_ms=500, submit_firebase=submit_to_firebase):
+    def __init__(self, transport=None, poll_interval_ms=500, submit_firebase=submit_to_firebase,
+                 connection=None, backoff=None):
         super().__init__()
         self.charts_visible = False
         self._shut_down = False
@@ -99,6 +102,9 @@ class MainWindow(QMainWindow):
             header_layout.addWidget(QWidget(), 0, i)
 
         # Adiciona os botões nas últimas duas colunas
+        # Área de status (estado da conexão) antes dos botões
+        self.status_area = StatusArea()
+        header_layout.addWidget(self.status_area, 0, 10, alignment=Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(self.config_button, 0, 11, alignment=Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(self.close_button, 0, 12, alignment=Qt.AlignmentFlag.AlignRight)
 
@@ -202,13 +208,15 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.error_label, 2, 1, 1, 1)
 
         self.adapter = CompatibilityAdapter(self.manual_fields, self.write_requested.emit, submit_firebase)
+        self.on_connection_state(ConnectionState.DISCONNECTED)  # until the first Frame arrives
 
         # O worker é dono de toda a I/O Modbus e do timer de Poll, em sua própria thread
-        self._worker = ModbusWorker(transport or ModbusTcpTransport(), poll_interval_ms)
+        self._worker = ModbusWorker(transport or ModbusTcpTransport(), poll_interval_ms, connection, backoff)
         self._thread = QThread()
         self._worker.moveToThread(self._thread)
         self._thread.started.connect(self._worker.start)
         self._worker.frame_ready.connect(self.on_frame, Qt.ConnectionType.QueuedConnection)
+        self._worker.connection_state_changed.connect(self.on_connection_state, Qt.ConnectionType.QueuedConnection)
         self.write_requested.connect(self._worker.write_register, Qt.ConnectionType.QueuedConnection)
         self.stop_requested.connect(self._worker.stop, Qt.ConnectionType.QueuedConnection)
         # Direct: the QThread lives on the UI thread, which is blocked in shutdown() while waiting.
@@ -223,6 +231,11 @@ class MainWindow(QMainWindow):
         if self.charts_visible:
             self.redraw_charts()
         self.error_label.setText("")
+
+    @pyqtSlot(object)
+    def on_connection_state(self, state):
+        self.status_area.show_connection_state(state)
+        self.channel_cards.set_dimmed(state != ConnectionState.CONNECTED)
 
     def redraw_charts(self):
         for channel in CHANNELS:
@@ -262,7 +275,8 @@ class MainWindow(QMainWindow):
         # Gerar o gráfico
         history = self.adapter.chart_history
         x = history.timestamps
-        y = history.values[channel.name]
+        # Uma Reading ausente vira uma lacuna no gráfico, nunca um zero
+        y = [float("nan") if value is None else value for value in history.values[channel.name]]
         ax.plot(x, y, marker='o')
         ax.set_title(f"Gráfico de {channel.label}")
         ax.set_xlabel("Tempo")
