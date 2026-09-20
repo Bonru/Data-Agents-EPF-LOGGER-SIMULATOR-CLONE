@@ -6,13 +6,14 @@ from PyQt6.QtGui import QPalette
 from ..core.connection_state import ConnectionState
 from ..core.frame_history import FrameHistory
 from ..core.registry import CHANNELS
+from ..io_layer import firebase_sender
+from ..io_layer.firebase_sender import FirebaseSender
 from ..io_layer.transport import ModbusTcpTransport
 from ..io_layer.worker import ModbusWorker
-from .adapter import CompatibilityAdapter, submit_to_firebase
 from .cards import ChannelCards
 from .charts import ChannelChart
 from .override_field import OverrideField
-from .status import StatusArea
+from .status import FirebaseStatus, StatusArea
 
 WORKER_STOP_WAIT_MS = 3000
 
@@ -24,8 +25,10 @@ class MainWindow(QMainWindow):
     override_clear_requested = pyqtSignal(str)
     stop_requested = pyqtSignal()
 
-    def __init__(self, transport=None, poll_interval_ms=500, submit_firebase=submit_to_firebase,
-                 connection=None, backoff=None):
+    def __init__(self, transport=None, poll_interval_ms=500, firebase=None, connection=None, backoff=None,
+                 firebase_enabled=None):
+        """firebase is the FirebaseSender to use (default: a new one). firebase_enabled=False turns the
+        upload off; None follows the FIREBASE_ENABLED configuration (or is on if a sender is given)."""
         super().__init__()
         self.charts_visible = False
         self._shut_down = False
@@ -223,7 +226,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.error_label, 2, 1, 1, 1)
 
         self.history = FrameHistory()  # os últimos Frames, para os gráficos
-        self.adapter = CompatibilityAdapter(submit_firebase)
         self.on_connection_state(ConnectionState.DISCONNECTED)  # until the first Frame arrives
 
         # O worker é dono de toda a I/O Modbus e do timer de Poll, em sua própria thread
@@ -234,6 +236,7 @@ class MainWindow(QMainWindow):
         self._worker.frame_ready.connect(self.on_frame, Qt.ConnectionType.QueuedConnection)
         self._worker.connection_state_changed.connect(self.on_connection_state, Qt.ConnectionType.QueuedConnection)
         self._worker.overrides_changed.connect(self.on_overrides_changed, Qt.ConnectionType.QueuedConnection)
+        self._start_firebase_sender(firebase, firebase_enabled)
         self.write_requested.connect(self._worker.write_register, Qt.ConnectionType.QueuedConnection)
         self.override_set_requested.connect(self._worker.set_override, Qt.ConnectionType.QueuedConnection)
         self.override_clear_requested.connect(self._worker.clear_override, Qt.ConnectionType.QueuedConnection)
@@ -247,9 +250,37 @@ class MainWindow(QMainWindow):
     def on_frame(self, frame):
         self.channel_cards.show_frame(frame)
         self.history.append(frame)
-        self.adapter.consume(frame)
         self.draw_visible_charts()
         self.error_label.setText("")
+
+    def _start_firebase_sender(self, firebase, firebase_enabled):
+        """The sender gets each Frame straight from the worker (queued) and runs on its own thread."""
+        if firebase_enabled is None:  # follow the configuration, unless a sender was given
+            firebase_enabled = firebase is not None or firebase_sender.FIREBASE_ENABLED
+        if firebase_enabled and firebase is None:
+            firebase = FirebaseSender()
+        self._firebase = firebase if firebase_enabled else None
+        self._firebase_thread = None
+        if self._firebase is None:
+            self.status_area.show_firebase_status(FirebaseStatus.DISABLED)
+            return
+        self._firebase_thread = QThread()
+        self._firebase.moveToThread(self._firebase_thread)
+        self._worker.frame_ready.connect(self._firebase.submit, Qt.ConnectionType.QueuedConnection)
+        self._firebase.upload_finished.connect(self.on_firebase_upload, Qt.ConnectionType.QueuedConnection)
+        self._firebase_thread.start()
+
+    @pyqtSlot(bool)
+    def on_firebase_upload(self, succeeded):
+        self.status_area.show_firebase_status(FirebaseStatus.OK if succeeded else FirebaseStatus.FAILING)
+
+    @property
+    def needs_forced_exit(self):
+        """True if a thread is still running that must not be waited for: the worker, if it could not
+        be stopped, or the Firebase sender mid-upload. Qt aborts the process if a running QThread is
+        destroyed, so run_event_loop() then skips the normal teardown (a precaution: on the development
+        machine, Windows with PyQt6 6.4.2, a hung upload did not abort the process either way)."""
+        return self.worker_abandoned or (self._firebase_thread is not None and self._firebase_thread.isRunning())
 
     @pyqtSlot(object)
     def on_overrides_changed(self, channel_names):
@@ -333,6 +364,9 @@ class MainWindow(QMainWindow):
         if self._shut_down:
             return
         self._shut_down = True
+        if self._firebase_thread is not None:
+            # Never waited for: an upload in flight, even a hung one, must not delay closing.
+            self._firebase_thread.quit()
         self.stop_requested.emit()
         # Lets a Poll blocked on a hung Simulator bail out between reads.
         self._thread.requestInterruption()

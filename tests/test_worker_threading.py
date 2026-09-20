@@ -17,8 +17,8 @@ WIND = channel_named("velocidade_vento")
 def make_window(qapp):
     windows = []
 
-    def make(transport, poll_interval_ms=50, submit_firebase=lambda payload: None):
-        window = MainWindow(transport, poll_interval_ms, submit_firebase)
+    def make(transport, poll_interval_ms=50):
+        window = MainWindow(transport, poll_interval_ms)
         window.show()
         windows.append(window)
         return window

@@ -13,7 +13,7 @@ MEASURE_MS = 2500
 
 def measure_stall_ms(qapp, port):
     transport = ModbusTcpTransport("127.0.0.1", port, timeout=0.5)
-    window = MainWindow(transport, poll_interval_ms=100, submit_firebase=lambda payload: None)
+    window = MainWindow(transport, poll_interval_ms=100)
     window.show()
     run_for(500)  # let the window finish its first paint before measuring
     heartbeat = Heartbeat(interval_ms=20)
@@ -66,7 +66,7 @@ def test_an_absent_simulator_does_not_stall_the_ui(qapp):
 def test_a_simulator_dropping_connections_does_not_stall_the_ui(qapp):
     with FakeModbusServer({224: 32}) as server:
         transport = ModbusTcpTransport("127.0.0.1", server.port, timeout=0.5)
-        window = MainWindow(transport, poll_interval_ms=100, submit_firebase=lambda payload: None)
+        window = MainWindow(transport, poll_interval_ms=100)
         window.show()
         run_for(500)
         heartbeat = Heartbeat(interval_ms=20)
@@ -84,7 +84,7 @@ def test_the_ui_recovers_when_a_late_simulator_appears(qapp):
         port = server.port
         server.mode = "hang"
         transport = ModbusTcpTransport("127.0.0.1", port, timeout=0.3)
-        window = MainWindow(transport, poll_interval_ms=100, submit_firebase=lambda payload: None)
+        window = MainWindow(transport, poll_interval_ms=100)
         window.show()
         run_for(600)
         assert window.cards["velocidade_vento"].label.text().startswith(f"{CHANNELS[0].label}: —")
@@ -99,7 +99,7 @@ def test_the_ui_does_not_stall_with_six_or_more_charts_visible_while_frames_arri
     with FakeModbusServer() as server:
         server.run_simulator({224: 32, 226: 251, 500: 1000}, interval=0.5)  # a new Frame every 0.5 s, four times the real pace
         transport = ModbusTcpTransport("127.0.0.1", server.port, timeout=0.5)
-        window = MainWindow(transport, poll_interval_ms=100, submit_firebase=lambda payload: None)
+        window = MainWindow(transport, poll_interval_ms=100)
         window.show()
         run_for(500)
         window.toggle_view()  # the chart view: charts inside the viewport are drawn on every Frame

@@ -7,6 +7,7 @@ from pathlib import Path
 
 import pytest
 
+from tests.support.firebase_stub import HangingHttpServer
 from tests.support.modbus_server import FakeModbusServer
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -41,4 +42,13 @@ def test_closing_with_a_hung_simulator_ends_the_process_quickly():
 
 def test_closing_ends_the_process_even_if_a_modbus_call_never_returns():
     process, seconds = run_window_process("blocked")
+    assert_clean_exit(process, seconds)
+
+
+def test_closing_ends_the_process_quickly_even_if_a_firebase_upload_is_hanging():
+    with HangingHttpServer() as firebase:
+        process, seconds = run_window_process("firebase-hang", str(firebase.port))
+        uploads_started = firebase.requests_received
+
+    assert uploads_started >= 1  # an upload really was in flight (and never answered) when the window closed
     assert_clean_exit(process, seconds)

@@ -21,7 +21,7 @@ def make_window(qapp):
     windows = []
 
     def make(transport, poll_interval_ms=50):
-        window = MainWindow(transport, poll_interval_ms, submit_firebase=lambda payload: None)
+        window = MainWindow(transport, poll_interval_ms)
         window.show()
         window.frames = []
         window._worker.frame_ready.connect(window.frames.append)

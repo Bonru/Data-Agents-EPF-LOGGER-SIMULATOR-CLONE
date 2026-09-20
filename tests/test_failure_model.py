@@ -10,6 +10,8 @@ from datalogger_client.core.registry import CHANNELS, channel_named
 from datalogger_client.io_layer.transport import REQUEST_TIMEOUT_S, ModbusTcpTransport
 from datalogger_client.ui.cards import DIMMED_TEXT_COLOR, TEXT_COLOR
 from datalogger_client.ui.main_window import MainWindow
+from datalogger_client.io_layer.firebase_sender import FirebaseSender
+from tests.support.firebase_stub import RecordingPut
 from tests.support.heartbeat import run_for, run_until
 from tests.support.modbus_server import FakeModbusServer
 
@@ -28,10 +30,10 @@ def make_window(qapp, server):
     """A window on the test server, with short timeouts and backoff so the tests stay quick."""
     windows = []
 
-    def make(stale_after=6.0, submit_firebase=lambda payload: None):
+    def make(stale_after=6.0, firebase=None):
         transport = ModbusTcpTransport("127.0.0.1", server.port, timeout=0.5)
         window = MainWindow(
-            transport, poll_interval_ms=50, submit_firebase=submit_firebase,
+            transport, poll_interval_ms=50, firebase=firebase,
             connection=ConnectionStateMachine(stale_after=stale_after),
             backoff=Backoff(initial=0.1, cap=0.3),
         )
@@ -93,10 +95,10 @@ def test_a_simulator_that_answers_but_stops_changing_yields_stale_and_a_change_r
 
 def test_a_timestamp_register_above_65535_gives_a_partial_frame_with_no_error_and_no_zero(make_window, server):
     server.registers[500] = 70000  # cannot be sent in 16 bits: reading that block fails, the connection stays up
-    payloads = []
-    window = make_window(submit_firebase=payloads.append)
+    put = RecordingPut()
+    window = make_window(firebase=FirebaseSender(put=put))
 
-    assert run_until(lambda: window.frames and payloads)
+    assert run_until(lambda: window.frames and put.payloads)
 
     frame = window.frames[0]
     assert frame.timestamp is None  # not 0
@@ -112,7 +114,7 @@ def test_a_timestamp_register_above_65535_gives_a_partial_frame_with_no_error_an
     assert not is_dimmed(wind_card(window))
     assert window.history.readings(TESTE_CELULA)[-1] is None
     assert window.history.time_labels()[-1] == time.strftime("%H:%M:%S", time.localtime(frame.received_at))  # receive time stands in
-    by_name = {item["name"]: item["value"] for item in payloads[-1]}
+    by_name = {item["name"]: item["value"] for item in put.payloads[-1]}
     assert by_name["Teste Cel 40"] is None
     assert by_name["Vel. vento"] == 3.2
 

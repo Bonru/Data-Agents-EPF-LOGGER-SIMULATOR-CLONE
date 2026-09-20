@@ -126,7 +126,7 @@ def window(qapp, monkeypatch):
         original(self, history)
 
     monkeypatch.setattr(ChannelChart, "redraw", spy)
-    window = MainWindow(FakeTransport({224: 32, 500: 100}), poll_interval_ms=60000, submit_firebase=lambda payload: None)
+    window = MainWindow(FakeTransport({224: 32, 500: 100}), poll_interval_ms=60000)
     window.canvas_draws = []  # every real matplotlib draw, whoever asked for it
     for name, chart in window.charts.items():
         real_draw = chart.canvas.draw
