@@ -5,7 +5,8 @@ from PyQt6.QtCore import QObject, QThread, QTimer, pyqtSignal, pyqtSlot
 from ..core.backoff import Backoff
 from ..core.connection_state import ConnectionStateMachine
 from ..core.frame import decode_frame
-from ..core.registry import BLOCKS, TIMESTAMP, block_containing
+from ..core.overrides import ManualOverrides
+from ..core.registry import BLOCKS, TIMESTAMP, block_containing, channel_named
 
 TIMESTAMP_BLOCK = block_containing(TIMESTAMP.address)
 OTHER_BLOCKS = tuple(block for block in BLOCKS if block != TIMESTAMP_BLOCK)
@@ -21,6 +22,7 @@ class ModbusWorker(QObject):
 
     frame_ready = pyqtSignal(object)
     connection_state_changed = pyqtSignal(object)
+    overrides_changed = pyqtSignal(object)  # frozenset of the overridden Channel names
     stopped = pyqtSignal()
 
     def __init__(self, transport, interval_ms=500, connection=None, backoff=None, clock=time.monotonic):
@@ -31,7 +33,9 @@ class ModbusWorker(QObject):
         self._backoff = backoff or Backoff()
         self._clock = clock
         self._timer = None
-        self._last_frame = None
+        self._last_frame = None  # the last Frame emitted, overrides included
+        self._last_raw_frame = None  # the last Frame the Simulator gave, before overrides
+        self._overrides = ManualOverrides()
         self._retry_at = float("-inf")  # no Poll before this time (reconnect backoff)
 
     @pyqtSlot()
@@ -61,6 +65,24 @@ class ModbusWorker(QObject):
             print(f"Erro ao fechar o cliente: {e}")
         self.stopped.emit()
 
+    @pyqtSlot(str, float)
+    def set_override(self, channel_name, value):
+        try:
+            self._overrides.set(channel_named(channel_name), value)
+        except (KeyError, ValueError, OverflowError) as e:
+            print(f"Override ignorado para {channel_name}: {e}")
+            return
+        self.overrides_changed.emit(self._overrides.names())
+
+    @pyqtSlot(str)
+    def clear_override(self, channel_name):
+        try:
+            self._overrides.clear(channel_named(channel_name))
+        except KeyError:
+            print(f"Override desconhecido: {channel_name}")
+            return
+        self.overrides_changed.emit(self._overrides.names())
+
     @pyqtSlot(int, int)
     def write_register(self, address, value):
         try:
@@ -89,14 +111,31 @@ class ModbusWorker(QObject):
                 self._publish_state(self._connection.poll_failed(now))
                 return
             self._backoff.reset()
-            frame = decode_frame(registers, received_at=time.time())
-            new_frame = frame != self._last_frame
-            if new_frame:
+            simulator_frame = decode_frame(registers, received_at=time.time())
+            new_frame = self._simulator_advanced(simulator_frame)
+            self._last_raw_frame = simulator_frame
+            frame = self._overrides.overlay(simulator_frame)
+            if frame != self._last_frame:
                 self._last_frame = frame
                 self.frame_ready.emit(frame)
             self._publish_state(self._connection.poll_answered(now, new_frame))
+            self._write_overrides()
         except Exception as e:
             print(f"Erro ao tentar ler os registradores: {e}")
+
+    def _simulator_advanced(self, simulator_frame):
+        """Whether the Simulator gave a new Frame. Overridden Channels are left out of the
+        comparison: their registers hold what this Client wrote, not what the Simulator produced,
+        so setting an override must not make a stalled Simulator look alive."""
+        if self._last_raw_frame is None:
+            return True
+        overridden = self._overrides.names()
+        return simulator_frame.without_readings(overridden) != self._last_raw_frame.without_readings(overridden)
+
+    def _write_overrides(self):
+        """Re-assert every override on the Simulator: one write each, per Poll."""
+        for address, raw in self._overrides.register_writes():
+            self.write_register(address, raw)
 
     def _publish_state(self, changed):
         if changed:

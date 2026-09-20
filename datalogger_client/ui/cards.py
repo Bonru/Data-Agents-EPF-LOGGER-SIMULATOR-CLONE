@@ -7,6 +7,9 @@ from ..core.registry import CHANNELS, TIMESTAMP
 NO_READING = "—"
 TEXT_COLOR = "#333333"
 DIMMED_TEXT_COLOR = "#a8a8a8"
+CARD_STYLE = "background-color: #f0f0f0; border: {border}; border-radius: 10px;"
+NORMAL_BORDER = "1px solid #d0d0d0"
+OVERRIDDEN_BORDER = "2px solid #e69500"
 
 
 class ChannelCard(QWidget):
@@ -17,7 +20,7 @@ class ChannelCard(QWidget):
         self._missing = True  # no Reading yet
         self._dimmed = False  # the connection is not Connected
         self.setFixedSize(*size)
-        self.setStyleSheet("background-color: #f0f0f0; border: 1px solid #d0d0d0; border-radius: 10px;")
+        self.set_overridden(False)
 
         self.label = QLabel()
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -42,6 +45,10 @@ class ChannelCard(QWidget):
         self._dimmed = dimmed
         self._refresh_color()
 
+    def set_overridden(self, overridden):
+        """Mark the card while its Channel has a Manual override."""
+        self.setStyleSheet(CARD_STYLE.format(border=OVERRIDDEN_BORDER if overridden else NORMAL_BORDER))
+
     def _refresh_color(self):
         dim = self._missing or self._dimmed
         self.label.setStyleSheet(f"color: {DIMMED_TEXT_COLOR if dim else TEXT_COLOR};")
@@ -62,3 +69,7 @@ class ChannelCards:
     def set_dimmed(self, dimmed):
         for card in (*self.cards.values(), self.timestamp_card):
             card.set_dimmed(dimmed)
+
+    def show_overrides(self, channel_names):
+        for channel in CHANNELS:
+            self.cards[channel.name].set_overridden(channel.name in channel_names)

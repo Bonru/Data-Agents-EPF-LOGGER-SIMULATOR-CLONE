@@ -26,6 +26,15 @@ class Frame:
     def reading(self, channel):
         return self.readings.get(channel.name)
 
+    def with_readings(self, readings):
+        """A copy of this Frame with these Readings (Channel name -> value) replacing or adding to its own."""
+        return Frame({**self.readings, **readings}, self.timestamp, self.received_at)
+
+    def without_readings(self, channel_names):
+        """A copy of this Frame with the Readings of these Channels (by name) removed."""
+        kept = {name: value for name, value in self.readings.items() if name not in channel_names}
+        return Frame(kept, self.timestamp, self.received_at)
+
 
 def decode_frame(registers, received_at):
     """Build a Frame from raw register values (address -> raw); unread registers are absent."""

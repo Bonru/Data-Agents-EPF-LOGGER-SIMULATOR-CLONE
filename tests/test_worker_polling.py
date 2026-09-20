@@ -323,3 +323,170 @@ def test_the_state_goes_stale_by_time_even_while_the_worker_is_backing_off():
     worker.poll()  # skipped again, now past 6 s
 
     assert states == [ConnectionState.CONNECTED, ConnectionState.STALE]
+
+
+# --- Manual override: held, overlaid and written through ------------------------------------------
+
+
+def watch_overrides(worker):
+    changes = []
+    worker.overrides_changed.connect(changes.append)
+    return changes
+
+
+def writes(transport):
+    return transport.calls_named("write")
+
+
+def test_an_override_is_overlaid_on_the_next_frame_and_written_to_the_register():
+    transport = FakeTransport({224: 32, 500: 100})
+    worker, frames = make_worker(transport)
+    worker.poll()
+
+    worker.set_override("velocidade_vento", 12.5)
+    worker.poll()
+
+    assert frames[-1].reading(WIND) == 12.5  # the Simulator still says 3.2
+    assert writes(transport) == [(224, 125)]  # the value times the scale
+
+
+def test_the_override_is_re_asserted_with_exactly_one_write_per_poll():
+    transport = FakeTransport({224: 32, 500: 100})
+    worker, _ = make_worker(transport)
+    worker.set_override("velocidade_vento", 12.5)
+    worker.set_override("umidade_ar", 40.0)
+
+    worker.poll()
+    assert writes(transport) == [(224, 125), (228, 400)]  # one each
+    worker.poll()
+    worker.poll()
+
+    assert len(writes(transport)) == 6  # still one per override per Poll, not more
+
+
+def test_a_torn_poll_that_is_retried_still_writes_each_override_once():
+    def change_timestamp_once_mid_poll(transport, address, count):
+        if address == 5054 and not transport.changed:
+            transport.changed = True
+            transport.registers[500] += 2
+
+    transport = FakeTransport({500: 100}, on_read=change_timestamp_once_mid_poll)
+    transport.changed = False
+    worker, _ = make_worker(transport)
+    worker.set_override("velocidade_vento", 12.5)
+
+    worker.poll()  # the first attempt is discarded and read again
+
+    assert writes(transport) == [(224, 125)]
+
+
+def test_frames_keep_showing_the_override_while_the_simulator_overwrites_the_register():
+    transport = FakeTransport({224: 32, 500: 100})
+    worker, frames = make_worker(transport)
+    worker.set_override("velocidade_vento", 12.5)
+
+    for tick in range(3):
+        transport.registers[224] = 30 + tick  # the Simulator's own tick overwrites the register
+        transport.registers[500] += 2
+        worker.poll()
+
+    assert [frame.reading(WIND) for frame in frames] == [12.5, 12.5, 12.5]
+
+
+def test_clearing_an_override_ends_it_on_the_next_poll_and_the_simulators_value_shows_again():
+    transport = FakeTransport({224: 32, 500: 100})
+    worker, frames = make_worker(transport)
+    worker.set_override("velocidade_vento", 12.5)
+    worker.poll()
+    transport.registers[224] = 32  # the Simulator's next tick
+
+    worker.clear_override("velocidade_vento")
+    worker.poll()
+
+    assert frames[-1].reading(WIND) == 3.2
+    assert len(writes(transport)) == 1  # nothing written after the clear
+
+
+def test_setting_an_override_emits_a_new_frame_even_if_the_simulator_did_not_change():
+    transport = FakeTransport({224: 32, 500: 100})
+    worker, frames = make_worker(transport)
+    worker.poll()
+    worker.poll()
+    assert len(frames) == 1
+
+    worker.set_override("velocidade_vento", 12.5)
+    worker.poll()
+    worker.poll()
+    assert len(frames) == 2  # once, not on every Poll
+
+    transport.registers[224] = 32  # the Simulator's own next tick puts its value back
+    worker.clear_override("velocidade_vento")
+    worker.poll()
+    assert [frame.reading(WIND) for frame in frames] == [3.2, 12.5, 3.2]
+
+
+def test_an_override_does_not_make_a_stalled_simulator_look_alive():
+    clock = FakeClock()
+    transport = FakeTransport({224: 32, 500: 100})
+    worker, _ = make_worker(transport, clock)
+    states = watch_states(worker)
+    worker.poll()
+
+    clock.advance(5.0)
+    worker.set_override("velocidade_vento", 12.5)  # the emitted Frame changes, the Simulator's did not
+    worker.poll()
+    clock.advance(1.5)
+    worker.poll()
+
+    assert states == [ConnectionState.CONNECTED, ConnectionState.STALE]  # 6.5 s without a Simulator Frame
+
+
+def test_the_worker_reports_which_channels_are_overridden():
+    worker, _ = make_worker(FakeTransport())
+    changes = watch_overrides(worker)
+
+    worker.set_override("velocidade_vento", 12.5)
+    worker.set_override("umidade_ar", 40.0)
+    worker.clear_override("velocidade_vento")
+
+    assert changes == [frozenset({"velocidade_vento"}), frozenset({"velocidade_vento", "umidade_ar"}), frozenset({"umidade_ar"})]
+
+
+def test_an_override_for_an_unknown_channel_or_an_out_of_range_value_is_ignored():
+    transport = FakeTransport({500: 100})
+    worker, frames = make_worker(transport)
+    changes = watch_overrides(worker)
+
+    worker.set_override("no_such_channel", 1.0)
+    worker.set_override("velocidade_vento", 7000.0)  # does not fit the 16-bit register
+    worker.poll()
+
+    assert changes == []
+    assert writes(transport) == []
+    assert frames[0].reading(WIND) == 0.0  # the Simulator's own value
+
+
+def test_no_write_is_attempted_while_the_simulator_does_not_answer():
+    transport = FakeTransport({500: 100}, failing_addresses=ALL_BLOCK_STARTS)
+    worker, _ = make_worker(transport)
+    worker.set_override("velocidade_vento", 12.5)
+
+    worker.poll()
+
+    assert writes(transport) == []
+
+
+def test_the_override_survives_a_reconnection_and_is_written_again():
+    clock = FakeClock()
+    transport = FakeTransport({224: 32, 500: 100})
+    worker, frames = make_worker(transport, clock)
+    worker.set_override("velocidade_vento", 12.5)
+    worker.poll()
+    transport.failing_addresses = ALL_BLOCK_STARTS
+    worker.poll()
+    clock.advance(1.5)
+    transport.failing_addresses = set()
+
+    worker.poll()
+
+    assert len(writes(transport)) == 2  # once when it first answered, once after coming back

@@ -48,7 +48,7 @@ class RegisterBlock(NamedTuple):
         return self.start <= address <= self.end
 
 
-# In Frame order. The last two cannot be overridden (they have no sidebar field today).
+# In Frame order. Every Channel can be overridden; the Timestamp, which is not a Channel, cannot.
 CHANNELS = (
     Channel("velocidade_vento", "Vel. vento", "m/s", 224),
     Channel("temperatura_modulo_1", "Temperatura 1", "°C", 226),
@@ -68,8 +68,8 @@ CHANNELS = (
     Channel("radiacao_solar_poa1", "POA 1", "W/m²", 386),
     Channel("radiacao_solar_ghi", "GHI", "W/m²", 384),
     Channel("fault_code", "Fault_code", " ", 5054),
-    Channel("Irradiance", "Irradiance", "W/m²", 1, overridable=False),
-    Channel("Apparent Power", "Apparent Power", "kVA", 2, overridable=False),
+    Channel("Irradiance", "Irradiance", "W/m²", 1),
+    Channel("Apparent Power", "Apparent Power", "kVA", 2),
 )
 
 TIMESTAMP = TimestampField(address=500, scale=1)

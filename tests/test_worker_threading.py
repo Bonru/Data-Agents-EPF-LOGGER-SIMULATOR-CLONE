@@ -31,7 +31,8 @@ def make_window(qapp):
 def test_every_modbus_call_happens_on_the_worker_thread(make_window):
     transport = FakeTransport()
     window = make_window(transport)
-    window.manual_fields[WIND].setText("12")  # the sidebar re-sends this on every Frame
+    window.override_fields[WIND.name].line_edit.setText("12")
+    window.override_fields[WIND.name].line_edit.editingFinished.emit()  # the user confirms: the override is held and written on every Poll
     assert run_until(lambda: transport.calls_named("write") and len(transport.calls_named("read")) >= READS_PER_POLL)
     window.close()
 

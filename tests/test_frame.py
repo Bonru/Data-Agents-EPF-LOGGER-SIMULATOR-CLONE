@@ -55,6 +55,23 @@ def test_frames_with_different_readings_or_timestamps_differ():
     assert base != Frame({"umidade_ar": 40.0}, None, 1.0)
 
 
+def test_with_readings_replaces_and_adds_readings_and_keeps_the_rest():
+    frame = Frame({"velocidade_vento": 3.2, "umidade_ar": 40.0}, 100, received_at=5.0)
+
+    changed = frame.with_readings({"velocidade_vento": 12.5, "temperatura_ar": 20.0})
+
+    assert dict(changed.readings) == {"velocidade_vento": 12.5, "umidade_ar": 40.0, "temperatura_ar": 20.0}
+    assert changed.timestamp == 100 and changed.received_at == 5.0
+    assert dict(frame.readings) == {"velocidade_vento": 3.2, "umidade_ar": 40.0}  # the original is untouched
+
+
+def test_without_readings_drops_the_named_channels():
+    frame = Frame({"velocidade_vento": 3.2, "umidade_ar": 40.0}, 100, received_at=5.0)
+
+    assert dict(frame.without_readings({"velocidade_vento"}).readings) == {"umidade_ar": 40.0}
+    assert frame.without_readings(set()) == frame
+
+
 def test_decode_frame_applies_each_channels_scale_and_the_timestamp_scale():
     registers = {channel.address: 10 * (i + 1) for i, channel in enumerate(CHANNELS)}
     registers[TIMESTAMP.address] = 3725

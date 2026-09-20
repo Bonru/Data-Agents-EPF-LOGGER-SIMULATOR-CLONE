@@ -14,32 +14,15 @@ from tests.support.heartbeat import run_until
 
 TIMESTAMP_SECONDS = 3725  # 01:02:05
 WIND = channel_named("velocidade_vento")
-TEMPERATURE_1 = channel_named("temperatura_modulo_1")
-HUMIDITY = channel_named("umidade_ar")
 
 
 def make_frame(value=1.5, timestamp=TIMESTAMP_SECONDS):
     return Frame({channel.name: value for channel in CHANNELS}, timestamp, received_at=0.0)
 
 
-class FakeLineEdit:
-    def __init__(self, text=""):
-        self._text = text
-
-    def text(self):
-        return self._text
-
-
-def make_adapter(texts=None, writes=None, submitted=None):
-    """texts maps a Channel to what the user typed in its sidebar field."""
-    writes = [] if writes is None else writes
+def make_adapter(submitted=None):
     submitted = [] if submitted is None else submitted
-    fields = {channel: FakeLineEdit(text) for channel, text in (texts or {}).items()}
-    return CompatibilityAdapter(
-        fields,
-        request_write=lambda address, value: writes.append((address, value)),
-        submit_firebase=submitted.append,
-    )
+    return CompatibilityAdapter(submit_firebase=submitted.append)
 
 
 def test_firebase_payload_has_one_entry_per_channel_in_registry_order_named_by_label():
@@ -62,7 +45,7 @@ def test_a_channel_without_a_reading_has_a_null_value_in_the_payload():
 
 def test_each_frame_is_handed_to_the_firebase_submission():
     submitted = []
-    adapter = make_adapter(submitted=submitted)
+    adapter = make_adapter(submitted)
 
     adapter.consume(make_frame())
 
@@ -95,26 +78,6 @@ def test_seconds_to_hms():
     assert seconds_to_hms(TIMESTAMP_SECONDS) == "01:02:05"
 
 
-def test_every_non_empty_manual_field_is_re_sent_on_each_frame_scaled_by_the_channel():
-    writes = []
-    adapter = make_adapter({WIND: "5", TEMPERATURE_1: "", HUMIDITY: "-7"}, writes=writes)
-
-    adapter.consume(make_frame())
-    adapter.consume(make_frame())
-
-    expected = [(WIND.address, 50), (HUMIDITY.address, -70)]
-    assert writes == expected + expected
-
-
-def test_an_unparsable_manual_field_is_skipped_and_the_others_are_still_sent():
-    writes = []
-    adapter = make_adapter({WIND: "-", TEMPERATURE_1: "4"}, writes=writes)
-
-    adapter.consume(make_frame())
-
-    assert writes == [(TEMPERATURE_1.address, 40)]
-
-
 def test_submit_to_firebase_puts_the_payload_on_a_background_thread(monkeypatch):
     calls = []
     monkeypatch.setattr(requests, "put", lambda url, json, timeout: calls.append((url, json, timeout)))
@@ -136,11 +99,6 @@ def window(qapp):
     window.fake_transport = transport
     yield window
     window.close()
-
-
-def test_the_sidebar_has_a_field_for_each_overridable_channel_and_none_for_the_timestamp(window):
-    assert [channel.name for channel in window.manual_fields] == [c.name for c in CHANNELS if c.overridable]
-    assert len(window.manual_fields) == 18
 
 
 def test_charts_are_drawn_only_while_the_chart_view_is_visible(window, monkeypatch):
@@ -189,9 +147,3 @@ def test_the_cards_follow_the_frames_the_simulator_produces(window):
         return -1 if shown == "—" else int(shown)  # "—" until the first Frame arrives
 
     assert run_until(lambda: timestamp_shown() >= 4)  # the Simulator advances 2 s per Frame
-
-
-def test_manual_insertion_writes_the_value_times_ten_to_the_register(window):
-    window.manual_fields[TEMPERATURE_1].setText("25")  # Temperatura 1, register 226
-
-    assert run_until(lambda: (226, 250) in window.fake_transport.calls_named("write"))

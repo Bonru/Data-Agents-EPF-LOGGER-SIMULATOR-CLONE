@@ -70,9 +70,8 @@ def test_the_timestamp_decodes_to_seconds_of_day():
     assert TIMESTAMP.decode(3725) == 3725
 
 
-def test_only_channels_that_have_a_sidebar_field_today_are_overridable():
-    not_overridable = [channel.name for channel in CHANNELS if not channel.overridable]
-    assert not_overridable == ["Irradiance", "Apparent Power"]
+def test_every_channel_is_overridable():
+    assert all(channel.overridable for channel in CHANNELS)
 
 
 def test_names_are_unique_and_lookup_by_name_works():

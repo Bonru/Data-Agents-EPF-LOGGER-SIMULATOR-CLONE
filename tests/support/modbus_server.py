@@ -21,6 +21,7 @@ class FakeModbusServer:
     def __init__(self, registers=None):
         self.registers = dict(registers or {})
         self.writes = []  # (address, value) in arrival order
+        self.reads = []  # (address, count) in arrival order
         self.mode = "normal"
         self.delay = 0.0
         self._stopping = threading.Event()
@@ -39,6 +40,19 @@ class FakeModbusServer:
 
     def __exit__(self, *exc):
         self.stop()
+
+    def run_simulator(self, values, interval=0.15, timestamp_step=2):
+        """Behave like the Simulator: every `interval` seconds overwrite the registers with
+        `values` (address -> raw) and advance the Timestamp (register 500) by `timestamp_step`."""
+        threading.Thread(target=self._simulate, args=(dict(values), interval, timestamp_step), daemon=True).start()
+
+    def _simulate(self, values, interval, timestamp_step):
+        timestamp = values.get(500, 0)
+        while not self._stopping.is_set():
+            timestamp += timestamp_step
+            self.registers.update(values)
+            self.registers[500] = timestamp
+            self._stopping.wait(interval)
 
     def drop_connections(self):
         with self._lock:
@@ -96,6 +110,7 @@ class FakeModbusServer:
         function = pdu[0]
         if function == 3:
             address, count = struct.unpack(">HH", pdu[1:5])
+            self.reads.append((address, count))
             values = [self.registers.get(address + i, 0) for i in range(count)]
             if any(not 0 <= value <= 0xFFFF for value in values):
                 return None

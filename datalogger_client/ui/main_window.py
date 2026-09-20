@@ -4,7 +4,6 @@ from PyQt6.QtCore import Qt, QThread, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QPalette
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from PyQt6.QtGui import QIntValidator
 
 from ..core.connection_state import ConnectionState
 from ..core.registry import CHANNELS
@@ -12,6 +11,7 @@ from ..io_layer.transport import ModbusTcpTransport
 from ..io_layer.worker import ModbusWorker
 from .adapter import CompatibilityAdapter, submit_to_firebase
 from .cards import ChannelCards
+from .override_field import OverrideField
 from .status import StatusArea
 
 WORKER_STOP_WAIT_MS = 3000
@@ -20,6 +20,8 @@ WORKER_STOP_WAIT_MS = 3000
 class MainWindow(QMainWindow):
     # The UI reaches the worker only through these signals.
     write_requested = pyqtSignal(int, int)
+    override_set_requested = pyqtSignal(str, float)  # Channel name, value
+    override_clear_requested = pyqtSignal(str)
     stop_requested = pyqtSignal()
 
     def __init__(self, transport=None, poll_interval_ms=500, submit_firebase=submit_to_firebase,
@@ -115,7 +117,7 @@ class MainWindow(QMainWindow):
         sidebar_widget.setFixedSize(int(width * 0.11), int(height * 0.9))
         sidebar_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
         sidebar_layout = QVBoxLayout()
-        self.manual_fields = {}  # overridable Channel -> its input
+        self.override_fields = {}  # Channel name -> its sidebar input
 
         sidebar_layout.setContentsMargins(10, 10, 10, 10)
 
@@ -155,11 +157,18 @@ class MainWindow(QMainWindow):
             line_edit.setFixedSize(*fixed_size)
             line_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
             line_edit.setMaxLength(max_length)  # Definindo o limite de caracteres
-            line_edit.setValidator(QIntValidator())  # Permitindo apenas entrada de números
             sidebar_layout.addWidget(line_edit, alignment=Qt.AlignmentFlag.AlignCenter)
 
-            self.manual_fields[channel] = line_edit
-            sidebar_layout.addWidget(QWidget(), alignment=Qt.AlignmentFlag.AlignCenter) #espaçamento
+            # Mensagem embaixo do campo (erro de validação ou "override ativo"); também faz o espaçamento
+            message_label = QLabel()
+            message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            message_label.setWordWrap(True)
+            sidebar_layout.addWidget(message_label, alignment=Qt.AlignmentFlag.AlignCenter)
+
+            field = OverrideField(channel, line_edit, message_label, line_edit_style)
+            field.set_requested.connect(self.override_set_requested)
+            field.clear_requested.connect(self.override_clear_requested)
+            self.override_fields[channel.name] = field
 
         scroll_area_sidebar.setWidget(scroll_content_sidebar)
         layout.addWidget(scroll_area_sidebar, 1, 0, 1, 1)
@@ -207,7 +216,7 @@ class MainWindow(QMainWindow):
         self.error_label.setStyleSheet("color: red;")
         layout.addWidget(self.error_label, 2, 1, 1, 1)
 
-        self.adapter = CompatibilityAdapter(self.manual_fields, self.write_requested.emit, submit_firebase)
+        self.adapter = CompatibilityAdapter(submit_firebase)
         self.on_connection_state(ConnectionState.DISCONNECTED)  # until the first Frame arrives
 
         # O worker é dono de toda a I/O Modbus e do timer de Poll, em sua própria thread
@@ -217,7 +226,10 @@ class MainWindow(QMainWindow):
         self._thread.started.connect(self._worker.start)
         self._worker.frame_ready.connect(self.on_frame, Qt.ConnectionType.QueuedConnection)
         self._worker.connection_state_changed.connect(self.on_connection_state, Qt.ConnectionType.QueuedConnection)
+        self._worker.overrides_changed.connect(self.on_overrides_changed, Qt.ConnectionType.QueuedConnection)
         self.write_requested.connect(self._worker.write_register, Qt.ConnectionType.QueuedConnection)
+        self.override_set_requested.connect(self._worker.set_override, Qt.ConnectionType.QueuedConnection)
+        self.override_clear_requested.connect(self._worker.clear_override, Qt.ConnectionType.QueuedConnection)
         self.stop_requested.connect(self._worker.stop, Qt.ConnectionType.QueuedConnection)
         # Direct: the QThread lives on the UI thread, which is blocked in shutdown() while waiting.
         self._worker.stopped.connect(self._thread.quit, Qt.ConnectionType.DirectConnection)
@@ -231,6 +243,12 @@ class MainWindow(QMainWindow):
         if self.charts_visible:
             self.redraw_charts()
         self.error_label.setText("")
+
+    @pyqtSlot(object)
+    def on_overrides_changed(self, channel_names):
+        for name, field in self.override_fields.items():
+            field.show_active(name in channel_names)
+        self.channel_cards.show_overrides(channel_names)
 
     @pyqtSlot(object)
     def on_connection_state(self, state):

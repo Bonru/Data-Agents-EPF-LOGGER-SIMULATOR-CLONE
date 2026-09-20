@@ -1,8 +1,8 @@
 """Temporary compatibility adapter (ticket #6, fed with Frames since #18).
 
 Keeps the features that later tickets will migrate working on top of the
-Frame stream: chart history (#9), Firebase upload (#10) and the manual
-insertion sidebar (#8). Each ticket replaces one piece; #12 deletes this module.
+Frame stream: chart history (#9) and Firebase upload (#10). Each ticket
+replaces one piece; #12 deletes this module.
 """
 import threading
 import time
@@ -66,24 +66,10 @@ class ChartHistory:
 
 
 class CompatibilityAdapter:
-    def __init__(self, manual_fields, request_write, submit_firebase):
-        """manual_fields maps each overridable Channel to its sidebar input."""
-        self._manual_fields = manual_fields
-        self._request_write = request_write
+    def __init__(self, submit_firebase):
         self._submit_firebase = submit_firebase
         self.chart_history = ChartHistory()
 
     def consume(self, frame):
         self.chart_history.append(frame)
         self._submit_firebase(build_firebase_payload(frame))
-        self._resend_manual_values()
-
-    def _resend_manual_values(self):
-        for channel, line_edit in self._manual_fields.items():
-            text = line_edit.text()
-            if text == "":
-                continue
-            try:
-                self._request_write(channel.address, channel.encode(int(text)))
-            except ValueError:
-                print(f"Valor inválido para {channel.label}: {text!r}")
