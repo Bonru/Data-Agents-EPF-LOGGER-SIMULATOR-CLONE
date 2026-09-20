@@ -13,7 +13,6 @@ pytestmark = pytest.mark.filterwarnings("ignore::pytest.PytestUnhandledThreadExc
 
 WRAP_MESSAGE = "End of dataset reached; restarting from the first row."
 ROW_VALUES = [1.0, 2.0, 3.0]  # wind speed of the three rows: registers 10, 20, 30
-WIND_REGISTERS = [10, 20, 30]
 TICK = 0.01
 
 
@@ -180,13 +179,14 @@ def test_a_client_reading_register_224_sees_the_values_cycle_and_keep_advancing_
     server = ModbusServer("127.0.0.1", port, no_block=True, data_bank=bank)
     server.start()
     client = ModbusClient("127.0.0.1", port, timeout=2.0)
+    following = {10: 20, 20: 30, 30: 10}  # rows 0 -> 1 -> 2 -> 0
     try:
         seen = []
         deadline = time.monotonic() + 3.0
         while time.monotonic() < deadline and len(seen) < 9:
             value = client.read_holding_registers(224, 1)
             assert value, "the read failed"
-            if not seen or seen[-1] != value[0]:
+            if value[0] in following and (not seen or seen[-1] != value[0]):  # 0 is the register before the first tick
                 seen.append(value[0])  # only when the served value changes
             time.sleep(0.005)
     finally:
@@ -195,6 +195,5 @@ def test_a_client_reading_register_224_sees_the_values_cycle_and_keep_advancing_
         bank.finish()
 
     assert len(seen) >= 9, seen
-    following = {10: 20, 20: 30, 30: 10}  # rows 0 -> 1 -> 2 -> 0
     assert all(following[a] == b for a, b in zip(seen, seen[1:])), seen  # it cycles, in order
     assert seen.count(10) >= 2  # and after the wrap it went on advancing: row 0 came round again
