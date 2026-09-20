@@ -476,6 +476,30 @@ def test_no_write_is_attempted_while_the_simulator_does_not_answer():
     assert writes(transport) == []
 
 
+def test_the_poll_stops_writing_overrides_after_the_first_failed_write():
+    transport = FakeTransport({224: 32, 500: 100}, write_result=False)  # answers reads, refuses writes
+    worker, _ = make_worker(transport)
+    worker.set_override("velocidade_vento", 12.5)
+    worker.set_override("umidade_ar", 40.0)
+    worker.set_override("temperatura_ar", 20.0)
+
+    worker.poll()
+
+    assert len(writes(transport)) == 1  # not one full timeout per override
+
+
+def test_a_failed_write_does_not_stop_the_overlay_or_the_next_polls_attempt():
+    transport = FakeTransport({224: 32, 500: 100}, write_result=False)
+    worker, frames = make_worker(transport)
+    worker.set_override("velocidade_vento", 12.5)
+
+    worker.poll()
+    worker.poll()
+
+    assert frames[-1].reading(WIND) == 12.5
+    assert len(writes(transport)) == 2  # tried again on the next Poll
+
+
 def test_the_override_survives_a_reconnection_and_is_written_again():
     clock = FakeClock()
     transport = FakeTransport({224: 32, 500: 100})

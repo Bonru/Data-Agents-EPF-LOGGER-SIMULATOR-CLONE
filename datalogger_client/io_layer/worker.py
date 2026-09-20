@@ -85,10 +85,17 @@ class ModbusWorker(QObject):
 
     @pyqtSlot(int, int)
     def write_register(self, address, value):
+        self._write(address, value)
+
+    def _write(self, address, value):
+        """One register write. Returns whether the Simulator accepted it."""
         try:
-            print(self._transport.write_single_register(address, value))
+            written = self._transport.write_single_register(address, value)
+            print(written)
+            return bool(written)
         except Exception as e:
             print(f"Erro ao tentar escrever no registrador: {e}")
+            return False
 
     @pyqtSlot()
     def poll(self):
@@ -133,9 +140,17 @@ class ModbusWorker(QObject):
         return simulator_frame.without_readings(overridden) != self._last_raw_frame.without_readings(overridden)
 
     def _write_overrides(self):
-        """Re-assert every override on the Simulator: one write each, per Poll."""
+        """Re-assert every override on the Simulator: one write each, per Poll.
+
+        Stops at the first failed write, or when a stop was requested: a Simulator that
+        answers reads but not writes would otherwise cost a full timeout per override,
+        and a stop request would wait behind all of them.
+        """
         for address, raw in self._overrides.register_writes():
-            self.write_register(address, raw)
+            if QThread.currentThread().isInterruptionRequested():
+                return
+            if not self._write(address, raw):
+                return
 
     def _publish_state(self, changed):
         if changed:

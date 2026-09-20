@@ -159,7 +159,7 @@ class MainWindow(QMainWindow):
             line_edit.setMaxLength(max_length)  # Definindo o limite de caracteres
             sidebar_layout.addWidget(line_edit, alignment=Qt.AlignmentFlag.AlignCenter)
 
-            # Mensagem embaixo do campo (erro de validação ou "override ativo"); também faz o espaçamento
+            # Mensagem embaixo do campo (erro de validação ou "override ativo")
             message_label = QLabel()
             message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
             message_label.setWordWrap(True)
@@ -169,6 +169,7 @@ class MainWindow(QMainWindow):
             field.set_requested.connect(self.override_set_requested)
             field.clear_requested.connect(self.override_clear_requested)
             self.override_fields[channel.name] = field
+            sidebar_layout.addWidget(QWidget(), alignment=Qt.AlignmentFlag.AlignCenter) #espaçamento
 
         scroll_area_sidebar.setWidget(scroll_content_sidebar)
         layout.addWidget(scroll_area_sidebar, 1, 0, 1, 1)

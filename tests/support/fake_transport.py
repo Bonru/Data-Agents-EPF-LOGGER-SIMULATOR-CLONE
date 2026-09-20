@@ -11,12 +11,13 @@ class FakeTransport:
     reads fail (return None).
     """
 
-    def __init__(self, registers=None, block=None, on_read=None, failing_addresses=()):
+    def __init__(self, registers=None, block=None, on_read=None, failing_addresses=(), write_result=True):
         self.registers = dict(registers or {})
         self.calls = []  # (name, args, thread ident)
         self.block = block
         self.on_read = on_read
         self.failing_addresses = set(failing_addresses)
+        self.write_result = write_result  # what write_single_register returns
 
     def _record(self, name, *args):
         self.calls.append((name, args, threading.get_ident()))
@@ -44,7 +45,7 @@ class FakeTransport:
     def write_single_register(self, address, value):
         self._record("write", address, value)
         self.registers[address] = value
-        return True
+        return self.write_result
 
 
 class TickingFakeTransport(FakeTransport):
