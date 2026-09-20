@@ -1,7 +1,6 @@
 """The Timestamp in register 500 is seconds of day // 2, so it fits 16 bits for the whole day, and the Client decodes it."""
 import os
 import socket
-import sys
 from pathlib import Path
 
 import pytest
