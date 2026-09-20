@@ -100,6 +100,7 @@ def test_the_ui_does_not_stall_with_six_or_more_charts_visible_while_frames_arri
         server.run_simulator({224: 32, 226: 251, 500: 1000}, interval=0.5)  # a new Frame every 0.5 s, four times the real pace
         transport = ModbusTcpTransport("127.0.0.1", server.port, timeout=0.5)
         window = MainWindow(transport, poll_interval_ms=100)
+        window.resize(1260, 800)  # three columns: about nine charts fit in the viewport
         window.show()
         run_for(500)
         window.toggle_view()  # the chart view: charts inside the viewport are drawn on every Frame

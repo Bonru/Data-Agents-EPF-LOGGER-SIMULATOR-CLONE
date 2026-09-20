@@ -12,6 +12,11 @@ from ..io_layer.transport import ModbusTcpTransport
 from ..io_layer.worker import ModbusWorker
 from .cards import ChannelCards
 from .charts import ChannelChart
+from .layout import (
+    CONTENT_STRETCH, CONTROL_POINT_SIZE, DEFAULT_WINDOW_SIZE, HEADER_MIN_HEIGHT, MAX_COLUMNS, MINIMUM_WINDOW_SIZE,
+    GRID_MARGIN, GRID_SPACING, OUTER_MARGIN, OUTER_SPACING, SIDEBAR_MIN_WIDTH, SIDEBAR_STRETCH, TITLE_POINT_SIZE, columns_for_width,
+    header_fits_one_row, row_after,
+)
 from .override_field import OverrideField
 from .status import FirebaseStatus, StatusArea
 
@@ -38,181 +43,26 @@ class MainWindow(QMainWindow):
 
         # Configuração da janela principal
         self.setWindowTitle("Interface Datalogger")
-        screen_geometry = QApplication.primaryScreen().geometry()
-        width = int(screen_geometry.width() * 0.87)
-        height = int(screen_geometry.height() * 0.87)
-        self.setGeometry(int(screen_geometry.width() * 0.1), int(screen_geometry.height() * 0.1), width, height)
+        self.resize(*DEFAULT_WINDOW_SIZE)
+        self.setMinimumSize(*MINIMUM_WINDOW_SIZE)  # explicit, so the window can shrink to where the layout goes compact
+        self.grid_columns = 0  # columns of the card grid; set by _reflow()
+        self.header_compact = None  # whether the page is stacked for a narrow window; set by _reflow()
 
-        # Widget principal e layout
+        # Widget principal e layout: a coluna lateral e a área de conteúdo dividem a largura por fatores de esticamento
         central_widget = QWidget()
-        layout = QGridLayout()
-        layout.setContentsMargins(20, 20, 20, 20)
-        layout.setSpacing(15)
-        central_widget.setLayout(layout)
+        self._page = QGridLayout()
+        self._page.setContentsMargins(OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN, OUTER_MARGIN)
+        self._page.setSpacing(OUTER_SPACING)
+        self._page.setColumnMinimumWidth(0, SIDEBAR_MIN_WIDTH)
+        self._page.setColumnStretch(0, SIDEBAR_STRETCH)
+        self._page.setColumnStretch(1, CONTENT_STRETCH)
+        central_widget.setLayout(self._page)
         self.setCentralWidget(central_widget)
 
-        # Retângulo azul superior esquerdo com título
-        admin_label = QLabel("Interface")
-        admin_label.setFixedSize(int(width * 0.11), int(height * 0.11))
-        admin_label.setStyleSheet("background-color: #4a90e2; color: #ffffff; border-radius: 10px; padding: 10px;")
-        font = QFont()
-        font.setPixelSize(32)
-        admin_label.setFont(font)
-        admin_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(admin_label, 0, 0, 1, 1)
-
-        # Barra superior com botão "toggle"
-        header_widget = QWidget()
-        header_widget.setFixedSize(int(width * 1), int(height * 0.11))
-        header_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
-
-        # Botão toggle para alternar entre dados e gráficos
-        self.config_button = QPushButton("Exibir Gráfico")
-        self.config_button.setFixedSize(int(width * 0.1), int(height * 0.05))
-        self.config_button.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #4a90e2;
-                font-size: 14px;
-                border: none;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-            }
-        """)
-        self.config_button.clicked.connect(self.toggle_view)
-
-        # Botão para fechar a aplicação
-        self.close_button = QPushButton("Fechar Aplicação")
-        self.close_button.setFixedSize(int(width * 0.1), int(height * 0.05))
-        self.close_button.setStyleSheet("""
-            QPushButton {
-                background-color: #ffffff;
-                color: #4a90e2;
-                font-size: 14px;
-                border: none;
-                border-radius: 5px;
-            }
-            QPushButton:hover {
-                background-color: #e0e0e0;
-            }
-        """)
-        self.close_button.clicked.connect(self.close_application)
-
-        # Layout do cabeçalho
-        header_layout = QGridLayout(header_widget)
-        header_layout.setContentsMargins(0, 0, 20, 0)
-
-        # Adiciona espaços vazios nas primeiras colunas
-        for i in range(10):
-            header_layout.addWidget(QWidget(), 0, i)
-
-        # Adiciona os botões nas últimas duas colunas
-        # Área de status (estado da conexão) antes dos botões
-        self.status_area = StatusArea()
-        header_layout.addWidget(self.status_area, 0, 10, alignment=Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(self.config_button, 0, 11, alignment=Qt.AlignmentFlag.AlignCenter)
-        header_layout.addWidget(self.close_button, 0, 12, alignment=Qt.AlignmentFlag.AlignRight)
-
-        layout.addWidget(header_widget, 0, 1, 1, 1)
-
-        # Barra lateral esquerda com 5 linhas
-        sidebar_widget = QWidget()
-        sidebar_widget.setFixedSize(int(width * 0.11), int(height * 0.9))
-        sidebar_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
-        sidebar_layout = QVBoxLayout()
-        self.override_fields = {}  # Channel name -> its sidebar input
-
-        sidebar_layout.setContentsMargins(10, 10, 10, 10)
-
-        # Adicionando titulo na barra lateral
-        label = QLabel(f"Inserção manual")
-        label.setStyleSheet("background-color: #ffffff; color: #4a90e2; font-size: 18px;")
-        label.setFixedSize(int(width * 0.09), int(height * 0.06))
-        label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        sidebar_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignCenter)
-
-        # Definindo estilos e tamanhos padronizados
-        label_style = "background-color: #ffffff; color: #4a90e2; font-size: 18px;"
-        line_edit_style = "background-color: #ffffff; color: #4a90e2; font-size: 16px;"
-        fixed_size = (int(width * 0.08), int(height * 0.03))
-        max_length = 6  # Definindo o limite de caracteres
-
-        # Ajustando o espaçamento do layout
-        sidebar_layout.setSpacing(9)
-        sidebar_layout.addWidget(QWidget(), alignment=Qt.AlignmentFlag.AlignCenter)
-
-        # Adicionando um QScrollArea para a barra lateral
-        scroll_area_sidebar = QScrollArea()
-        scroll_area_sidebar.setWidgetResizable(True)
-        scroll_area_sidebar.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
-        scroll_content_sidebar = QWidget()
-        scroll_content_sidebar.setLayout(sidebar_layout)
-
-        for channel in (channel for channel in CHANNELS if channel.overridable):
-            label = QLabel(channel.label)
-            label.setStyleSheet(label_style)
-            label.setFixedSize(*fixed_size)
-            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            sidebar_layout.addWidget(label, alignment=Qt.AlignmentFlag.AlignCenter)
-
-            line_edit = QLineEdit("")
-            line_edit.setStyleSheet(line_edit_style)
-            line_edit.setFixedSize(*fixed_size)
-            line_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            line_edit.setMaxLength(max_length)  # Definindo o limite de caracteres
-            sidebar_layout.addWidget(line_edit, alignment=Qt.AlignmentFlag.AlignCenter)
-
-            # Mensagem embaixo do campo (erro de validação ou "override ativo")
-            message_label = QLabel()
-            message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            message_label.setWordWrap(True)
-            sidebar_layout.addWidget(message_label, alignment=Qt.AlignmentFlag.AlignCenter)
-
-            field = OverrideField(channel, line_edit, message_label, line_edit_style)
-            field.set_requested.connect(self.override_set_requested)
-            field.clear_requested.connect(self.override_clear_requested)
-            self.override_fields[channel.name] = field
-            sidebar_layout.addWidget(QWidget(), alignment=Qt.AlignmentFlag.AlignCenter) #espaçamento
-
-        scroll_area_sidebar.setWidget(scroll_content_sidebar)
-        layout.addWidget(scroll_area_sidebar, 1, 0, 1, 1)
-
-        # Área de rolagem para os gráficos e cartões
-        self.scroll_area = QScrollArea()
-        self.scroll_area.setWidgetResizable(True)
-        scroll_content = QWidget()
-        scroll_layout = QGridLayout(scroll_content)
-        scroll_layout.setSpacing(20)
-
-        self.channel_cards = ChannelCards((int(width * 0.28), int(height * 0.1)))
-        self.cards = self.channel_cards.cards  # Channel name -> card
-        self.charts = {}  # Channel name -> its chart
-
-        # Preenchendo a grade com os cartões e os gráficos
-        for index, channel in enumerate(CHANNELS):
-            row, col = divmod(index, 3)
-            # Gráfico do matplotlib: a figura e a linha são criadas uma única vez
-            chart = ChannelChart(channel)
-            chart.canvas.setFixedSize(int(width * 0.3), int(height * 0.25))
-            self.charts[channel.name] = chart
-
-            # Adicionar widgets ao grid
-            scroll_layout.addWidget(self.cards[channel.name], row, col)
-            scroll_layout.addWidget(chart.canvas, row, col)
-            chart.canvas.hide()  # Ocultar gráficos inicialmente
-
-        # O cartão do Timestamp do Frame ocupa a próxima célula (não tem gráfico)
-        row, col = divmod(len(CHANNELS), 3)
-        scroll_layout.addWidget(self.channel_cards.timestamp_card, row, col)
-
-        scroll_content.setLayout(scroll_layout)
-        self.scroll_area.setWidget(scroll_content)
-        layout.addWidget(self.scroll_area, 1, 1, 1, 1)
-        # Um gráfico que entra na área visível ao rolar é desenhado
-        self.scroll_area.verticalScrollBar().valueChanged.connect(lambda _value: self.draw_visible_charts())
-        self.scroll_area.horizontalScrollBar().valueChanged.connect(lambda _value: self.draw_visible_charts())
+        self._title = self._build_title()
+        self._build_header()
+        self._build_sidebar()
+        self._build_content()
 
         # Fundo claro
         self.setAutoFillBackground(True)
@@ -223,7 +73,9 @@ class MainWindow(QMainWindow):
         # Label para mensagens de erro
         self.error_label = QLabel("")
         self.error_label.setStyleSheet("color: red;")
-        layout.addWidget(self.error_label, 2, 1, 1, 1)
+
+        self._arrange_page(compact=False)
+        self._reflow(self.width())
 
         self.history = FrameHistory()  # os últimos Frames, para os gráficos
         self.on_connection_state(ConnectionState.DISCONNECTED)  # until the first Frame arrives
@@ -245,6 +97,211 @@ class MainWindow(QMainWindow):
         self._worker.stopped.connect(self._thread.quit, Qt.ConnectionType.DirectConnection)
         QApplication.instance().aboutToQuit.connect(self.shutdown)
         self._thread.start()
+
+    # --- construção da interface: nenhum tamanho vem da tela; tudo é dado por layouts, políticas e mínimos ---
+
+    def _build_title(self):
+        """Retângulo azul superior esquerdo com título."""
+        title = QLabel("Interface")
+        title.setStyleSheet("background-color: #4a90e2; color: #ffffff; border-radius: 10px; padding: 10px;")
+        font = QFont()
+        font.setPointSize(TITLE_POINT_SIZE)
+        title.setFont(font)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setMinimumHeight(HEADER_MIN_HEIGHT)
+        return title
+
+    def _build_header(self):
+        """Barra superior azul: área de status e botões. Em janelas estreitas os itens são empilhados."""
+        self.header_widget = QWidget()
+        self.header_widget.setMinimumHeight(HEADER_MIN_HEIGHT)
+        self.header_widget.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
+        self.status_area = StatusArea()
+        self.config_button = self._header_button("Exibir Gráfico", self.toggle_view)
+        self.close_button = self._header_button("Fechar Aplicação", self.close_application)
+        self._header_layout = QGridLayout(self.header_widget)
+        self._header_layout.setContentsMargins(10, 6, 10, 6)
+        self._header_layout.setSpacing(10)
+        self._arrange_header(compact=False)
+        self.header_regular_min_width = self.header_widget.minimumSizeHint().width()  # what one row needs
+        return self.header_widget
+
+    @staticmethod
+    def _header_button(text, on_click):
+        button = QPushButton(text)
+        button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #ffffff;
+                color: #4a90e2;
+                font-size: {CONTROL_POINT_SIZE}pt;
+                padding: 6px 12px;
+                border: none;
+                border-radius: 5px;
+            }}
+            QPushButton:hover {{
+                background-color: #e0e0e0;
+            }}
+        """)
+        button.clicked.connect(on_click)
+        return button
+
+    def _arrange_header(self, compact):
+        header = self._header_layout
+        for widget in (self.status_area, self.config_button, self.close_button):
+            header.removeWidget(widget)
+        for column in range(4):
+            header.setColumnStretch(column, 0)
+        self.status_area.set_compact(compact)
+        if compact:  # everything stacked in one column
+            header.addWidget(self.status_area, 0, 0)
+            header.addWidget(self.config_button, 1, 0)
+            header.addWidget(self.close_button, 2, 0)
+            header.setColumnStretch(0, 1)
+        else:
+            header.addWidget(self.status_area, 0, 0)
+            header.addWidget(self.config_button, 0, 2)
+            header.addWidget(self.close_button, 0, 3)
+            header.setColumnStretch(1, 1)  # o espaço entre a área de status e os botões
+        self.header_compact = compact
+
+    def _arrange_page(self, compact):
+        """The title, header, sidebar and content: side by side normally, and in a narrow window with
+        the title and the header across the whole width, above the sidebar and the content."""
+        page = self._page
+        for widget in (self._title, self.header_widget, self.sidebar_area, self.scroll_area, self.error_label):
+            page.removeWidget(widget)
+        for row in range(4):
+            page.setRowStretch(row, 0)
+        if compact:
+            page.addWidget(self._title, 0, 0, 1, 2)
+            page.addWidget(self.header_widget, 1, 0, 1, 2)
+            page.addWidget(self.sidebar_area, 2, 0)
+            page.addWidget(self.scroll_area, 2, 1)
+            page.addWidget(self.error_label, 3, 1)
+            page.setRowStretch(2, 1)  # a barra lateral e os cartões ficam com a altura
+        else:
+            page.addWidget(self._title, 0, 0)
+            page.addWidget(self.header_widget, 0, 1)
+            page.addWidget(self.sidebar_area, 1, 0)
+            page.addWidget(self.scroll_area, 1, 1)
+            page.addWidget(self.error_label, 2, 1)
+            page.setRowStretch(1, 1)
+        self._arrange_header(compact)
+
+    def _build_sidebar(self):
+        """Barra lateral azul de inserção manual: um campo por Channel, numa área de rolagem."""
+        label_style = f"background-color: #ffffff; color: #4a90e2; font-size: {CONTROL_POINT_SIZE}pt;"
+        line_edit_style = f"background-color: #ffffff; color: #4a90e2; font-size: {CONTROL_POINT_SIZE}pt;"
+        max_length = 6  # limite de caracteres
+        self.override_fields = {}  # Channel name -> its sidebar input
+
+        sidebar_layout = QVBoxLayout()
+        sidebar_layout.setContentsMargins(10, 10, 10, 10)
+        sidebar_layout.setSpacing(9)
+
+        title = QLabel("Inserção manual")
+        title.setStyleSheet(label_style)
+        title.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        title.setWordWrap(True)
+        sidebar_layout.addWidget(title)
+        sidebar_layout.addWidget(QWidget())  # espaçamento
+
+        for channel in (channel for channel in CHANNELS if channel.overridable):
+            label = QLabel(channel.label)
+            label.setStyleSheet(label_style)
+            label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            label.setWordWrap(True)
+            sidebar_layout.addWidget(label)
+
+            line_edit = QLineEdit("")
+            line_edit.setStyleSheet(line_edit_style)
+            line_edit.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            line_edit.setMaxLength(max_length)
+            sidebar_layout.addWidget(line_edit)
+
+            # Mensagem embaixo do campo (erro de validação ou "override ativo")
+            message_label = QLabel()
+            message_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            message_label.setWordWrap(True)
+            sidebar_layout.addWidget(message_label)
+
+            field = OverrideField(channel, line_edit, message_label, line_edit_style)
+            field.set_requested.connect(self.override_set_requested)
+            field.clear_requested.connect(self.override_clear_requested)
+            self.override_fields[channel.name] = field
+            sidebar_layout.addWidget(QWidget())  # espaçamento
+        sidebar_layout.addStretch(1)
+
+        content = QWidget()
+        content.setLayout(sidebar_layout)
+        self.sidebar_area = QScrollArea()
+        self.sidebar_area.setWidgetResizable(True)
+        self.sidebar_area.setMinimumWidth(SIDEBAR_MIN_WIDTH)
+        self.sidebar_area.setStyleSheet("background-color: #4a90e2; border-radius: 10px;")
+        self.sidebar_area.setWidget(content)
+        return self.sidebar_area
+
+    def _build_content(self):
+        """Área de rolagem com a grade de cartões e gráficos; o número de colunas muda com a largura."""
+        self.channel_cards = ChannelCards()
+        self.cards = self.channel_cards.cards  # Channel name -> card
+        self.charts = {}  # Channel name -> its chart
+        for channel in CHANNELS:
+            self.charts[channel.name] = ChannelChart(channel)  # a figura e a linha são criadas uma única vez
+            self.charts[channel.name].canvas.hide()  # ocultar gráficos inicialmente
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        scroll_content = QWidget()
+        self._grid = QGridLayout(scroll_content)
+        self._grid.setSpacing(GRID_SPACING)
+        self._grid.setContentsMargins(GRID_MARGIN, GRID_MARGIN, GRID_MARGIN, GRID_MARGIN)
+        self.scroll_area.setWidget(scroll_content)
+        # Um gráfico que entra na área visível ao rolar é desenhado
+        self.scroll_area.verticalScrollBar().valueChanged.connect(lambda _value: self.draw_visible_charts())
+        self.scroll_area.horizontalScrollBar().valueChanged.connect(lambda _value: self.draw_visible_charts())
+        return self.scroll_area
+
+    def _place_grid_items(self, columns):
+        """Put every card (and its chart, in the same cell) in the grid with this many columns."""
+        grid = self._grid
+        while grid.count():
+            grid.takeAt(0)  # the widgets stay; only their places in the grid are forgotten
+        for index, channel in enumerate(CHANNELS):
+            row, column = divmod(index, columns)
+            grid.addWidget(self.cards[channel.name], row, column)
+            grid.addWidget(self.charts[channel.name].canvas, row, column)
+        # O cartão do Timestamp do Frame ocupa a próxima célula (não tem gráfico)
+        row, column = divmod(len(CHANNELS), columns)
+        grid.addWidget(self.channel_cards.timestamp_card, row, column)
+        for column in range(MAX_COLUMNS):
+            grid.setColumnStretch(column, 1 if column < columns else 0)
+        for row in range(len(CHANNELS) + 2):
+            grid.setRowStretch(row, 0)
+        grid.setRowStretch(row_after(len(CHANNELS) + 1, columns), 1)  # a folga vertical fica abaixo dos cartões
+
+    def _reflow(self, window_width):
+        """Recompute what depends on the window width; called on every resize."""
+        columns = columns_for_width(window_width)
+        if columns != self.grid_columns:
+            self.grid_columns = columns
+            self._place_grid_items(columns)
+        compact = not header_fits_one_row(window_width, self.header_regular_min_width)
+        if compact != self.header_compact:
+            self._arrange_page(compact)
+        self._redraw_charts_after_layout()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._reflow(event.size().width())
+
+    def _redraw_charts_after_layout(self):
+        """The charts changed size (or place): draw them again, once Qt has laid them out."""
+        for chart in self.charts.values():
+            chart.invalidate()
+        if self.charts_visible:
+            self._charts_placed = False
+            QTimer.singleShot(0, self._charts_are_placed)
 
     @pyqtSlot(object)
     def on_frame(self, frame):

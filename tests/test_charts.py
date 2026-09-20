@@ -131,6 +131,7 @@ def window(qapp, monkeypatch):
     for name, chart in window.charts.items():
         real_draw = chart.canvas.draw
         chart.canvas.draw = lambda name=name, real_draw=real_draw: (window.canvas_draws.append(name), real_draw())[1]
+    window.resize(1260, 800)  # three columns: about nine charts fit in the viewport
     window.show()
     run_for(300)  # the layout is placed, and the first Frame (from the worker) has arrived
     window.drawn = drawn

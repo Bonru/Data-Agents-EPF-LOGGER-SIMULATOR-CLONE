@@ -1,9 +1,10 @@
 from enum import Enum
 
 from PyQt6.QtCore import Qt
-from PyQt6.QtWidgets import QHBoxLayout, QLabel, QWidget
+from PyQt6.QtWidgets import QBoxLayout, QHBoxLayout, QLabel, QWidget
 
 from ..core.connection_state import ConnectionState
+from .layout import CONTROL_POINT_SIZE
 
 
 class FirebaseStatus(Enum):
@@ -33,12 +34,17 @@ class StatusArea(QWidget):
 
     def __init__(self):
         super().__init__()
-        layout = QHBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        self.connection_label = self._add_label(layout)
-        self.firebase_label = self._add_label(layout)
+        self._layout = QHBoxLayout(self)
+        self._layout.setContentsMargins(0, 0, 0, 0)
+        self.connection_label = self._add_label(self._layout)
+        self.firebase_label = self._add_label(self._layout)
         self.show_connection_state(ConnectionState.DISCONNECTED)
         self.show_firebase_status(FirebaseStatus.WAITING)
+
+    def set_compact(self, compact):
+        """Stack the two labels instead of putting them side by side (a narrow header has no room)."""
+        direction = QBoxLayout.Direction.TopToBottom if compact else QBoxLayout.Direction.LeftToRight
+        self._layout.setDirection(direction)
 
     def show_connection_state(self, state):
         self._show(self.connection_label, *CONNECTION_DISPLAY[state])
@@ -57,5 +63,6 @@ class StatusArea(QWidget):
     def _show(label, text, color):
         label.setText(text)
         label.setStyleSheet(
-            f"background-color: #ffffff; color: {color}; border-radius: 5px; padding: 4px 10px; font-weight: bold;"
+            f"background-color: #ffffff; color: {color}; border-radius: 5px; padding: 4px 10px; "
+            f"font-weight: bold; font-size: {CONTROL_POINT_SIZE}pt;"
         )

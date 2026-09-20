@@ -1,8 +1,9 @@
 from PyQt6.QtCore import Qt
 from PyQt6.QtGui import QFont
-from PyQt6.QtWidgets import QGridLayout, QLabel, QWidget
+from PyQt6.QtWidgets import QGridLayout, QLabel, QSizePolicy, QWidget
 
 from ..core.registry import CHANNELS, TIMESTAMP
+from .layout import CARD_MIN_SIZE, CARD_POINT_SIZE
 
 NO_READING = "—"
 TEXT_COLOR = "#333333"
@@ -13,19 +14,21 @@ OVERRIDDEN_BORDER = "2px solid #e69500"
 
 
 class ChannelCard(QWidget):
-    def __init__(self, label, unit, size):
+    def __init__(self, label, unit):
         super().__init__()
         self._label = label
         self._unit = unit
         self._missing = True  # no Reading yet
         self._dimmed = False  # the connection is not Connected
-        self.setFixedSize(*size)
+        self.setMinimumSize(*CARD_MIN_SIZE)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum)  # grows with its grid column
         self.set_overridden(False)
 
         self.label = QLabel()
         self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.label.setWordWrap(True)  # a long text wraps instead of being clipped in a narrow card
         font = QFont()
-        font.setPixelSize(22)
+        font.setPointSize(CARD_POINT_SIZE)
         self.label.setFont(font)
 
         layout = QGridLayout(self)
@@ -57,9 +60,9 @@ class ChannelCard(QWidget):
 class ChannelCards:
     """One card per Channel, plus one for the Frame's Timestamp, updated from each Frame."""
 
-    def __init__(self, size):
-        self.cards = {channel.name: ChannelCard(channel.label, channel.unit, size) for channel in CHANNELS}
-        self.timestamp_card = ChannelCard(TIMESTAMP.label, TIMESTAMP.unit, size)
+    def __init__(self):
+        self.cards = {channel.name: ChannelCard(channel.label, channel.unit) for channel in CHANNELS}
+        self.timestamp_card = ChannelCard(TIMESTAMP.label, TIMESTAMP.unit)
 
     def show_frame(self, frame):
         for channel in CHANNELS:
