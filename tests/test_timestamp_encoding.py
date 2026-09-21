@@ -11,6 +11,7 @@ from datalogger_client.io_layer.transport import ModbusTcpTransport
 from datalogger_client.io_layer.worker import ModbusWorker
 from datalogger_client.ui.cards import ChannelCards
 from datalogger_client.ui.charts import ChannelChart
+from tests.support.simulator_banks import quiet_bank
 
 MAX_REGISTER = 65535
 MAX_ENCODED = 43199  # 86399 // 2
@@ -19,16 +20,6 @@ MAX_ENCODED = 43199  # 86399 // 2
 def seconds_of(time_text):
     hours, minutes, seconds = (int(part) for part in time_text.split(":"))
     return hours * 3600 + minutes * 60 + seconds
-
-
-def quiet_bank(simulator):
-    """The Simulator's register bank without its background thread: the test advances the rows itself."""
-
-    class QuietBank(simulator.MyDataBank):
-        def update_values_periodically(self):
-            pass
-
-    return QuietBank()
 
 
 def use_sheet_with_times(simulator, monkeypatch, times):

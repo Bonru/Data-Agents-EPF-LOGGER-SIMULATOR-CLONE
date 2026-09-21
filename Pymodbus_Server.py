@@ -101,33 +101,47 @@ class MyDataBank(DataBank):
                 self.testecel40, self.ref_cel_30, self.ref_cel_10, self.ref_40_temp, self.ref_30_temp, self.ref_10_temp,
                 self.poa_ri_2, self.poa_2, self.poa_ri_1, self.poa_1, self.ghi, self.timestamp, self.Fault_c1, self.irradiance, self.aparent_power]
 
+    # Função que monta o Frame completo: endereço do registrador -> valor novo
+    def register_values(self):
+        # Mapeamento dos parâmetros para os registradores correspondentes
+        return {
+            224: self.v_vento,  # vel. vento
+            226: self.temp_1,  # temperatura do ar
+            228: self.umidade_higromet,  # umidade do ar
+            230: self.temp_2,  # Temperatura do modulo 1
+            232: self.temp_higrometro,  # Temperatura do modulo 2
+            276: self.ref_cel_40,  # radiação celula 40m
+            501: self.testecel40,  # Teste celula 40m
+            278: self.ref_40_temp,  # Temperatura celula 40m
+            280: self.ref_cel_30,  # radiação celula 30m
+            282: self.ref_30_temp,  # Temperatura celula 30m
+            284: self.ref_cel_10,  # radiação celula 10m
+            286: self.ref_10_temp,  # Temperatura celula 10m
+            384: self.ghi,  # Radiação solar GHI
+            386: self.poa_1,  # Radiação solar POA 1
+            388: self.poa_ri_1,  # Radiação solar POA RI 1
+            390: self.poa_2,  # Radiação solar POA 2
+            392: self.poa_ri_2,  # Radiação solar POA RI 2
+            500: self.timestamp,  # Timestamp
+            1: self.irradiance,  # Irradiance
+            2: self.aparent_power,  # Apparent Power
+            5054: self.Fault_c1,  # Argumento de falha
+        }
+
+    # Função que aplica um Frame completo aos registradores de uma só vez
+    def apply_register_values(self, values):
+        """Grava todos os valores segurando o mesmo lock que a leitura usa: uma leitura nunca vê
+        metade de um Frame. O lock não é reentrante: nada aqui dentro pode pedir o lock de novo."""
+        with self._h_regs_lock:
+            for address, value in values.items():
+                self._h_regs[address] = value
+
     def update_values(self):
         self.lista = self.new_values()
         print(self.lista)
         print("Tamanho da lista:", len(self.lista))
-        # Mapeamento dos parâmetros para os registradores correspondentes
-        self._h_regs[224] = self.v_vento  # vel. vento
-        self._h_regs[226] = self.temp_1  # temperatura do ar
-        self._h_regs[228] = self.umidade_higromet  # umidade do ar
-        self._h_regs[230] = self.temp_2  # Temperatura do modulo 1
-        self._h_regs[232] = self.temp_higrometro  # Temperatura do modulo 2
-        self._h_regs[276] = self.ref_cel_40  # radiação celula 40m
-        self._h_regs[501] = self.testecel40  # Teste celula 40m
-        self._h_regs[278] = self.ref_40_temp  # Temperatura celula 40m
-        self._h_regs[280] = self.ref_cel_30  # radiação celula 30m
-        self._h_regs[282] = self.ref_30_temp  # Temperatura celula 30m
-        self._h_regs[284] = self.ref_cel_10  # radiação celula 10m
-        self._h_regs[286] = self.ref_10_temp  # Temperatura celula 10m
-        self._h_regs[384] = self.ghi  # Radiação solar GHI
-        self._h_regs[386] = self.poa_1  # Radiação solar POA 1
-        self._h_regs[388] = self.poa_ri_1  # Radiação solar POA RI 1
-        self._h_regs[390] = self.poa_2  # Radiação solar POA 2
-        self._h_regs[392] = self.poa_ri_2  # Radiação solar POA RI 2
-        self._h_regs[500] = self.timestamp # Timestamp
-        self._h_regs[1] = self.irradiance # Irradiance
-        self._h_regs[2] = self.aparent_power # Apparent Power
-
-        self._h_regs[5054] = self.Fault_c1  # Argumento de falha
+        # Monta o conjunto completo de valores novos e aplica tudo de uma vez (sob o lock)
+        self.apply_register_values(self.register_values())
         
         return self.lista
 
@@ -143,11 +157,13 @@ class MyDataBank(DataBank):
 
     # Função para retornar os valores dos registradores
     def get_holding_registers(self, address, number=1, srv_info=None):
-        try:
-            return [self._h_regs[i] for i in range(address, address + number)]
+        # Segura o lock (o mesmo da atualização) durante a leitura inteira: um pedido vê um Frame completo
+        with self._h_regs_lock:
+            try:
+                return [self._h_regs[i] for i in range(address, address + number)]
 
-        except KeyError:
-            return
+            except KeyError:
+                return
 
     def start(self, address, number=1, srv_info=None):
         self.lista = self.new_values()
