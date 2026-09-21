@@ -61,7 +61,7 @@ A protocol value (register 5054): `0` means no fault. It is an **unscaled intege
 ## Client & connection
 
 **Client**:
-This repository's Modbus TCP client (the worker in `datalogger_client/io_layer/worker.py`, running on its own thread; see ADR-0001): it polls the Simulator for Frames and holds Manual overrides, and hands each Frame on to the PyQt UI and, through its own sender thread, to Firebase. Distinct from the PyQt UI, which only displays the Frames the Client emits and collects the user's overrides.
+This repository's Modbus TCP client (the worker in `datalogger_client/io_layer/worker.py`, running on its own thread; see ADR-0001): it polls the Simulator for Frames and holds Manual overrides, and hands each Frame on to the PyQt UI, which passes it to Firebase's own sender thread. Distinct from the PyQt UI, which only displays the Frames the Client emits and collects the user's overrides.
 _Avoid_: calling the UI "the client".
 
 **PyQt UI**:

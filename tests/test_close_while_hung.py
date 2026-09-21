@@ -5,7 +5,6 @@ import sys
 import time
 from pathlib import Path
 
-
 from tests.support.firebase_stub import HangingHttpServer
 from tests.support.modbus_server import FakeModbusServer
 
