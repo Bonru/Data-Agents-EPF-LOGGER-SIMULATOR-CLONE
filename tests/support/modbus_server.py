@@ -14,7 +14,6 @@ as the real pyModbusTCP server does; the client reconnects on its next request.
 import socket
 import struct
 import threading
-import time
 
 
 class FakeModbusServer:

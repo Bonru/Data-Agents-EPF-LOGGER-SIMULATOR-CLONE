@@ -6,13 +6,13 @@ import pytest
 
 from datalogger_client.core.backoff import Backoff
 from datalogger_client.core.connection_state import ConnectionStateMachine
-from datalogger_client.core.registry import CHANNELS, channel_named
+from datalogger_client.core.registry import channel_named
 from datalogger_client.io_layer.transport import REQUEST_TIMEOUT_S, ModbusTcpTransport
-from datalogger_client.ui.cards import DIMMED_TEXT_COLOR, TEXT_COLOR
+from datalogger_client.ui.cards import DIMMED_TEXT_COLOR
 from datalogger_client.ui.main_window import MainWindow
 from datalogger_client.io_layer.firebase_sender import FirebaseSender
 from tests.support.firebase_stub import RecordingPut
-from tests.support.heartbeat import run_for, run_until
+from tests.support.heartbeat import run_until
 from tests.support.modbus_server import FakeModbusServer
 
 WIND_TEXT = "Vel. vento: 3.2 m/s"

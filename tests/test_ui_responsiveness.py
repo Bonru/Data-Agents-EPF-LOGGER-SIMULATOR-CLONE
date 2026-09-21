@@ -1,5 +1,4 @@
 """The UI event loop must never stall, whatever the Simulator does."""
-import pytest
 
 from datalogger_client.core.registry import CHANNELS
 from datalogger_client.io_layer.transport import ModbusTcpTransport

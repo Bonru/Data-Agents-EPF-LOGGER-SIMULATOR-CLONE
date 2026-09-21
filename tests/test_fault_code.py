@@ -13,7 +13,7 @@ from datalogger_client.io_layer.worker import ModbusWorker
 from datalogger_client.ui.main_window import MainWindow
 from tests.support.fake_transport import FakeTransport
 from tests.support.firebase_stub import RecordingPut
-from tests.support.heartbeat import run_for, run_until
+from tests.support.heartbeat import run_until
 from tests.support.modbus_server import FakeModbusServer
 
 FAULT = channel_named("fault_code")  # register 5054

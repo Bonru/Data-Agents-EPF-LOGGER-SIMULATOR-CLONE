@@ -20,3 +20,7 @@
 ## 31/03/2025
 - (+) Melhorias nos requests HTTP (Timeout)
 - (+) Testes de uso de SQLite
+
+## Arquitetura
+
+O cliente Modbus roda em uma thread própria (worker) e a interface PyQt só recebe Frames imutáveis por sinais. A decisão está registrada em [docs/adr/0001-worker-thread-and-immutable-frames.md](docs/adr/0001-worker-thread-and-immutable-frames.md); o glossário do domínio está em [CONTEXT.md](CONTEXT.md).

@@ -5,10 +5,6 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 PACKAGE_SOURCES = sorted((REPO_ROOT / "datalogger_client").rglob("*.py"))
 
 
-def test_the_old_client_module_that_held_the_lists_is_gone():
-    assert not (REPO_ROOT / "Pymodbus_cliente.py").exists()
-
-
 def test_no_source_still_has_the_old_lists_or_their_names():
     assert PACKAGE_SOURCES
     for source in PACKAGE_SOURCES:

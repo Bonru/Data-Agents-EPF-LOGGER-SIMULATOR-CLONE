@@ -41,14 +41,14 @@ _Avoid_: spreadsheet column names (`ref_cel_40`), client display labels (`"Ref C
 
 **Frame**:
 One full sample across every Channel, captured at a single instant — equivalent to one row of the source spreadsheet. The Simulator advances one Frame per tick.
-_Avoid_: "leitura" / "reading" for this — reserved for a single Channel's value (see Reading). Code still uses `leitura`/`n_leitura` for this internally; known naming drift, not yet renamed.
+_Avoid_: "leitura" / "reading" for this — reserved for a single Channel's value (see Reading). The Simulator (`Pymodbus_Server.py`) still uses `leitura`/`n_leitura` for this internally; known naming drift, out of scope, not yet renamed.
 
 **Timestamp**:
 The Frame's own time of day, in seconds of day (shown as `hh:mm:ss`); not a Channel, and it cannot be overridden. A Modbus register is unsigned 16-bit (maximum 65535) but a day has up to 86399 seconds, so register 500 holds the seconds of day divided by 2, rounded down (0 to 43199), and the Client multiplies it by 2 again. The result is accurate to within 1 s, less than the Simulator's 2 s tick: a spreadsheet time of `05:31:11` is shown as `05:31:10`, and `23:59:59` as `23:59:58`. This is an encoding chosen for this Simulator; the manual does not document register 500.
 
 **Reading**:
 The value of one Channel within a Frame.
-_Avoid_: using "reading" for a full multi-Channel sample — that's a Frame. Code still uses `historico_leituras` for the client's per-Channel history; known naming drift, not yet renamed.
+_Avoid_: using "reading" for a full multi-Channel sample — that's a Frame.
 A Channel value that could not be obtained from the Simulator is not a Reading: it is never recorded as `0`, in history or in any downstream sink.
 
 **Manual override**:
@@ -61,7 +61,7 @@ A protocol value (register 5054): `0` means no fault. It is an **unscaled intege
 ## Client & connection
 
 **Client**:
-This repository's Modbus TCP client (`Pymodbus_cliente.py`): it polls the Simulator for Frames, holds Manual overrides, and forwards Frames to Firebase. Distinct from the PyQt UI, which only displays the Frames the Client emits and collects the user's overrides.
+This repository's Modbus TCP client (the worker in `datalogger_client/io_layer/worker.py`, running on its own thread; see ADR-0001): it polls the Simulator for Frames and holds Manual overrides, and hands each Frame on to the PyQt UI and, through its own sender thread, to Firebase. Distinct from the PyQt UI, which only displays the Frames the Client emits and collects the user's overrides.
 _Avoid_: calling the UI "the client".
 
 **PyQt UI**:
@@ -79,7 +79,7 @@ Health of the Client's link to the Simulator, one of three: **Connected** (Polls
 ## Legacy API path
 
 **`measure.py` / `post_measure()`**:
-A standalone, manual CLI tool that pushes one Channel's value to an older HTTP API (`lab-lserf`). Disconnected from the live pipeline (Simulator → Firebase → PyQt UI / web_view) — `Pymodbus_cliente.py` defines `post_measure()` but never calls it.
+A standalone, manual CLI tool that pushes one Channel's value to an older HTTP API (`lab-lserf`). Disconnected from the live pipeline (Simulator → Firebase → PyQt UI / web_view): nothing in the Client calls it.
 
 ## Testes/ SQLite scripts
 

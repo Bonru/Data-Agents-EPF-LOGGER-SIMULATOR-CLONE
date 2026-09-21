@@ -1,5 +1,4 @@
 """The Connection state machine and the reconnect backoff. Pure Python: no Qt anywhere in these tests."""
-import pytest
 
 from datalogger_client.core.backoff import Backoff
 from datalogger_client.core.connection_state import ConnectionState, ConnectionStateMachine
