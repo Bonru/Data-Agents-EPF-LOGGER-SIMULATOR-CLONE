@@ -88,3 +88,18 @@ exit: 2
 === should PASS (git log --grep mentioning the phrase) ===
 exit: 0
 ```
+
+### A second gap: the hook only covered one of two shells
+
+This environment exposes both a `Bash` tool and a separate `PowerShell` tool. The hook's `matcher` in `.claude/settings.json` originally listed only `"Bash"`, so the same `git push` run through the `PowerShell` tool would never trigger the hook at all — a silent bypass, not a misfire. Added a second `PreToolUse` entry with `"matcher": "PowerShell"` pointing at the same script, then verified live, through the actual `PowerShell` tool rather than a simulated payload:
+
+```
+PS> git push --dry-run origin feature/ui-decoupling
+PreToolUse:PowerShell hook error: [...block-dangerous-git.sh]: BLOCKED: 'git push --dry-run origin feature/ui-decoupling'
+matches dangerous pattern '(^|[;&|])[[:space:]]*git push'. The user has prevented you from doing this.
+
+PS> git status --short
+ M .claude/settings.json
+```
+
+Blocked through PowerShell exactly as it was through Bash; the read-only command still passes.
