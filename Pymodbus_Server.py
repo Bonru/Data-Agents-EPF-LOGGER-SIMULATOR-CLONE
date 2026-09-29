@@ -5,16 +5,25 @@ import pandas as pd
 from pyModbusTCP.server import ModbusServer, DataBank
 import threading
 import time
+import traceback
 
 logging.basicConfig()
 logging.getLogger('pyModbusTCP.server').setLevel(logging.DEBUG)
 df = pd.read_excel('Datalogger_28_11_2024.xlsx')
 
+# Um registrador Modbus tem 16 bits sem sinal (máx. 65535), mas os segundos do dia chegam a 86399.
+# O registrador 500 (Timestamp) guarda os segundos do dia divididos por 2, arredondados para baixo
+# (0 a 43199; erro máximo de 1 s, dentro do tick de 2 s do Simulador). O Cliente multiplica por 2.
+TIMESTAMP_SECONDS_PER_REGISTER = 2
+
 class MyDataBank(DataBank):
-    def __init__(self):
+    def __init__(self, dataset=None, tick_seconds=2):
+        """dataset: DataFrame com as linhas a servir (padrão: a planilha carregada acima).
+        tick_seconds: segundos entre uma linha e a próxima (padrão: 2)."""
         super().__init__()
-        self.timer = 2
-        self.leitura = 0
+        self.dataset = df if dataset is None else dataset
+        self.timer = tick_seconds
+        self.leitura = 0  # número da próxima linha a ler
         self.lista = []
         self.start(0)
         self.update_thread = threading.Thread(target=self.update_values_periodically)
@@ -24,6 +33,17 @@ class MyDataBank(DataBank):
     def sheet_values(self, n_leitura, df):
         row = df.iloc[n_leitura].to_dict()
         return row
+
+    # Função que escolhe a próxima linha; depois da última, volta para a primeira
+    def next_row_number(self):
+        """Número da próxima linha a ler. O contador avança já aqui, então uma linha que falhar
+        não é lida de novo no tick seguinte."""
+        if self.leitura >= len(self.dataset):
+            print("End of dataset reached; restarting from the first row.")
+            self.leitura = 0
+        row_number = self.leitura
+        self.leitura += 1
+        return row_number
     
     # Função para formatar os dados
     def treat_data(self, value):
@@ -40,10 +60,16 @@ class MyDataBank(DataBank):
         """Converte uma string no modelo XX:XX:XX para um inteiro."""
         hora = value.split(':')
         return int(hora[0])*3600 + int(hora[1])*60 + int(hora[2])
+
+    # Função para codificar os segundos do dia no valor do registrador 500
+    def encode_timestamp(self, seconds_of_day):
+        """Segundos do dia -> valor do registrador 500 (cabe em 16 bits o dia inteiro)."""
+        return seconds_of_day // TIMESTAMP_SECONDS_PER_REGISTER
+
         
     # Função para retornar os novos valores da proxima consulta na planilha
     def new_values(self):
-        parametros = self.sheet_values(self.leitura, df)
+        parametros = self.sheet_values(self.next_row_number(), self.dataset)
 
         #Leituras
         self.v_vento = self.treat_data(parametros['v_vento']) # i = 0
@@ -65,59 +91,79 @@ class MyDataBank(DataBank):
         self.ghi = abs(self.treat_data(parametros['ghi'])) # i = 16
         self.irradiance = abs(self.treat_data(parametros['Irradiance'])) # i = 17
         self.aparent_power = abs(self.treat_data(parametros['Apparent Power'])) # i = 18
-        self.timestamp = self.treat_timestamp(parametros['TIME']) # i = 19
+        self.timestamp = self.encode_timestamp(self.treat_timestamp(parametros['TIME'])) # i = 19 (valor do registrador 500)
 
         #Device Fault Code
         self.Fault_c1 = 0
 
-        self.leitura += 1  # atualiza numero da leitura
         
         return [self.v_vento, self.temp_1, self.umidade_higromet, self.temp_2, self.temp_higrometro, self.ref_cel_40,
                 self.testecel40, self.ref_cel_30, self.ref_cel_10, self.ref_40_temp, self.ref_30_temp, self.ref_10_temp,
                 self.poa_ri_2, self.poa_2, self.poa_ri_1, self.poa_1, self.ghi, self.timestamp, self.Fault_c1, self.irradiance, self.aparent_power]
 
+    # Função que monta o Frame completo: endereço do registrador -> valor novo
+    def register_values(self):
+        # Mapeamento dos parâmetros para os registradores correspondentes
+        return {
+            224: self.v_vento,  # vel. vento
+            226: self.temp_1,  # temperatura do ar
+            228: self.umidade_higromet,  # umidade do ar
+            230: self.temp_2,  # Temperatura do modulo 1
+            232: self.temp_higrometro,  # Temperatura do modulo 2
+            276: self.ref_cel_40,  # radiação celula 40m
+            501: self.testecel40,  # Teste celula 40m
+            278: self.ref_40_temp,  # Temperatura celula 40m
+            280: self.ref_cel_30,  # radiação celula 30m
+            282: self.ref_30_temp,  # Temperatura celula 30m
+            284: self.ref_cel_10,  # radiação celula 10m
+            286: self.ref_10_temp,  # Temperatura celula 10m
+            384: self.ghi,  # Radiação solar GHI
+            386: self.poa_1,  # Radiação solar POA 1
+            388: self.poa_ri_1,  # Radiação solar POA RI 1
+            390: self.poa_2,  # Radiação solar POA 2
+            392: self.poa_ri_2,  # Radiação solar POA RI 2
+            500: self.timestamp,  # Timestamp
+            1: self.irradiance,  # Irradiance
+            2: self.aparent_power,  # Apparent Power
+            5054: self.Fault_c1,  # Argumento de falha
+        }
+
+    # Função que aplica um Frame completo aos registradores de uma só vez
+    def apply_register_values(self, values):
+        """Grava todos os valores segurando o mesmo lock que a leitura usa: uma leitura nunca vê
+        metade de um Frame. O lock não é reentrante: nada aqui dentro pode pedir o lock de novo."""
+        with self._h_regs_lock:
+            for address, value in values.items():
+                self._h_regs[address] = value
+
     def update_values(self):
         self.lista = self.new_values()
         print(self.lista)
         print("Tamanho da lista:", len(self.lista))
-        # Mapeamento dos parâmetros para os registradores correspondentes
-        self._h_regs[224] = self.v_vento  # vel. vento
-        self._h_regs[226] = self.temp_1  # temperatura do ar
-        self._h_regs[228] = self.umidade_higromet  # umidade do ar
-        self._h_regs[230] = self.temp_2  # Temperatura do modulo 1
-        self._h_regs[232] = self.temp_higrometro  # Temperatura do modulo 2
-        self._h_regs[276] = self.ref_cel_40  # radiação celula 40m
-        self._h_regs[501] = self.testecel40  # Teste celula 40m
-        self._h_regs[278] = self.ref_40_temp  # Temperatura celula 40m
-        self._h_regs[280] = self.ref_cel_30  # radiação celula 30m
-        self._h_regs[282] = self.ref_30_temp  # Temperatura celula 30m
-        self._h_regs[284] = self.ref_cel_10  # radiação celula 10m
-        self._h_regs[286] = self.ref_10_temp  # Temperatura celula 10m
-        self._h_regs[384] = self.ghi  # Radiação solar GHI
-        self._h_regs[386] = self.poa_1  # Radiação solar POA 1
-        self._h_regs[388] = self.poa_ri_1  # Radiação solar POA RI 1
-        self._h_regs[390] = self.poa_2  # Radiação solar POA 2
-        self._h_regs[392] = self.poa_ri_2  # Radiação solar POA RI 2
-        self._h_regs[500] = self.timestamp # Timestamp
-        self._h_regs[1] = self.irradiance # Irradiance
-        self._h_regs[2] = self.aparent_power # Apparent Power
-
-        self._h_regs[5054] = self.Fault_c1  # Argumento de falha
+        # Monta o conjunto completo de valores novos e aplica tudo de uma vez (sob o lock)
+        self.apply_register_values(self.register_values())
         
         return self.lista
 
     def update_values_periodically(self):
         while True:
-            self.update_values()
+            try:
+                self.update_values()
+            except Exception:
+                # Uma atualização que falha não pode matar a thread: mostra o erro e segue no próximo tick
+                print("Update failed; continuing on the next tick:")
+                print(traceback.format_exc())
             time.sleep(self.timer)
 
     # Função para retornar os valores dos registradores
     def get_holding_registers(self, address, number=1, srv_info=None):
-        try:
-            return [self._h_regs[i] for i in range(address, address + number)]
+        # Segura o lock (o mesmo da atualização) durante a leitura inteira: um pedido vê um Frame completo
+        with self._h_regs_lock:
+            try:
+                return [self._h_regs[i] for i in range(address, address + number)]
 
-        except KeyError:
-            return
+            except KeyError:
+                return
 
     def start(self, address, number=1, srv_info=None):
         self.lista = self.new_values()

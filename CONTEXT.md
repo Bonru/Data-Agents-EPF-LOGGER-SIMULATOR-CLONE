@@ -9,11 +9,11 @@ The real physical device installed at the solarimetric station (e.g. the EMS4-GD
 _Avoid_: Simulator (that's this repo's own server, not the hardware)
 
 **Simulator**:
-This repository's Modbus TCP server (`Pymodbus_Server.py`), which mimics the Datalogger's register responses for testing, advancing one Frame per tick from the source spreadsheet.
+This repository's Modbus TCP server (`Pymodbus_Server.py`), which mimics the Datalogger's register responses for testing, advancing one Frame per tick from the source spreadsheet. It stores each value in one ×10 integer register (the Fault code unscaled, and the Timestamp as the seconds of day divided by 2), unlike the real Datalogger, which serves 32-bit floats over two registers.
 _Avoid_: Datalogger, Server
 
 **Station**:
-The physical site as a whole: every Sensor plus the real Datalogger, and — tentatively, pending confirmation against the manual — electrical-side equipment feeding the Apparent Power Channel.
+The physical site as a whole: every Sensor plus the real Datalogger, and — tentatively; the manual does not document those registers — electrical-side equipment feeding the Apparent Power Channel.
 
 ## Sensors & Channels
 
@@ -41,11 +41,14 @@ _Avoid_: spreadsheet column names (`ref_cel_40`), client display labels (`"Ref C
 
 **Frame**:
 One full sample across every Channel, captured at a single instant — equivalent to one row of the source spreadsheet. The Simulator advances one Frame per tick.
-_Avoid_: "leitura" / "reading" for this — reserved for a single Channel's value (see Reading). Code still uses `leitura`/`n_leitura` for this internally; known naming drift, not yet renamed.
+_Avoid_: "leitura" / "reading" for this — reserved for a single Channel's value (see Reading). The Simulator (`Pymodbus_Server.py`) still uses `leitura`/`n_leitura` for this internally; known naming drift, out of scope, not yet renamed.
+
+**Timestamp**:
+The Frame's own time of day, in seconds of day (shown as `hh:mm:ss`); not a Channel, and it cannot be overridden. A Modbus register is unsigned 16-bit (maximum 65535) but a day has up to 86399 seconds, so register 500 holds the seconds of day divided by 2, rounded down (0 to 43199), and the Client multiplies it by 2 again. The result is accurate to within 1 s, less than the Simulator's 2 s tick: a spreadsheet time of `05:31:11` is shown as `05:31:10`, and `23:59:59` as `23:59:58`. This is an encoding chosen for this Simulator; the manual does not document register 500.
 
 **Reading**:
 The value of one Channel within a Frame.
-_Avoid_: using "reading" for a full multi-Channel sample — that's a Frame. Code still uses `historico_leituras` for the client's per-Channel history; known naming drift, not yet renamed.
+_Avoid_: using "reading" for a full multi-Channel sample — that's a Frame.
 A Channel value that could not be obtained from the Simulator is not a Reading: it is never recorded as `0`, in history or in any downstream sink.
 
 **Manual override**:
@@ -53,12 +56,12 @@ A value the user types for a Channel in the PyQt UI ("Inserção manual") that r
 _Avoid_: "one-shot write" — an override is not applied once and forgotten.
 
 **Fault code**:
-A protocol value (register 5054) from the Datalogger's fault-reporting scheme: `0` means no fault, other values represent specific device faults per the Datalogger's manual. The Simulator always reports `0`; simulating real fault conditions is a known future gap, not yet implemented.
+A protocol value (register 5054): `0` means no fault. It is an **unscaled integer**: unlike every measurement, which the Simulator stores as value × 10, the Fault code is stored, read, overridden and displayed as the plain integer (`0`, never `0.0`; overriding it with `3` writes `3`, not `30`). The Simulator always reports `0`; simulating real fault conditions is a known future gap, not yet implemented. What a non-zero code means is unconfirmed: the Datalogger's manual does not document register 5054 (see Open questions).
 
 ## Client & connection
 
 **Client**:
-This repository's Modbus TCP client (`Pymodbus_cliente.py`): it polls the Simulator for Frames, holds Manual overrides, and forwards Frames to Firebase. Distinct from the PyQt UI, which only displays the Frames the Client emits and collects the user's overrides.
+This repository's Modbus TCP client (the worker in `datalogger_client/io_layer/worker.py`, running on its own thread; see ADR-0001): it polls the Simulator for Frames and holds Manual overrides, and hands each Frame on to the PyQt UI, which passes it to Firebase's own sender thread. Distinct from the PyQt UI, which only displays the Frames the Client emits and collects the user's overrides.
 _Avoid_: calling the UI "the client".
 
 **PyQt UI**:
@@ -76,7 +79,7 @@ Health of the Client's link to the Simulator, one of three: **Connected** (Polls
 ## Legacy API path
 
 **`measure.py` / `post_measure()`**:
-A standalone, manual CLI tool that pushes one Channel's value to an older HTTP API (`lab-lserf`). Disconnected from the live pipeline (Simulator → Firebase → PyQt UI / web_view) — `Pymodbus_cliente.py` defines `post_measure()` but never calls it.
+A standalone, manual CLI tool that pushes one Channel's value to an older HTTP API (`lab-lserf`). Disconnected from the live pipeline (Simulator → Firebase → PyQt UI / web_view): nothing in the Client calls it.
 
 ## Testes/ SQLite scripts
 
@@ -111,6 +114,6 @@ _(Timestamp isn't a measured Channel — it's the Frame's own timestamp field.)_
 
 ## Open questions
 
-- **Fault code scale** (unverified): the Client treats every register as ×10-scaled, including Fault code (register 5054), but Fault code is a protocol value and the Simulator writes it unscaled (`0`). A non-zero code would display wrongly (e.g. `3` reads as `0.3`). Check against the Datalogger's manual.
+- **What the Datalogger's manual documents** (read): only registers 224-286 and 384-392 (the measurements) and 406-414 (accumulated irradiation), each as a 32-bit float over two registers, big-endian. It does **not** document registers 1, 2, 500, 501 or 5054, so their meaning, and the meaning of non-zero Fault codes, remains unconfirmed. This Simulator deliberately uses one ×10 integer register per value (the Fault code unscaled, and the Timestamp as the seconds of day divided by 2) instead of the device's 32-bit floats, and that is not to be changed. The Fault code being an unscaled integer is a decision, not something the manual states.
 
-- **Irradiance / Apparent Power source** (unconfirmed): tentatively assumed to come from separate equipment beyond the core weather Sensors — a reference pyranometer for Irradiance, an inverter or power meter for Apparent Power — which would extend Station to include electrical-side equipment. Not verified against the Datalogger's manual: the manual PDF couldn't be read in this environment (poppler-utils/`pdftoppm` isn't installed). Re-check when that's possible.
+- **Irradiance / Apparent Power source** (unconfirmed): tentatively assumed to come from separate equipment beyond the core weather Sensors — a reference pyranometer for Irradiance, an inverter or power meter for Apparent Power — which would extend Station to include electrical-side equipment. The manual has been read and does not document registers 1 and 2 (Irradiance, Apparent Power), so it neither confirms nor contradicts this.
